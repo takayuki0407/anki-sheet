@@ -138,19 +138,28 @@ try {
   if (!jumped.startsWith("50 ")) throw new Error("TOC jump failed: " + jumped);
   console.log("OK: TOC jump ->", jumped.trim());
 
-  // --- continuous scroll mode ---
-  await clickByText(page, "button", "連続スクロール");
+  // --- 縦読み (continuous scroll) mode + its 全体表示 ---
+  await clickByText(page, "button", "縦読み");
   await page.waitForSelector(".continuous-scroll .page-slot", { timeout: 15000 });
   await page.waitForFunction(
-    () => {
-      const c = document.querySelector(".continuous-scroll .page-canvas");
-      return c && c.width > 0;
-    },
+    () => [...document.querySelectorAll(".continuous-scroll .page-canvas")].some((c) => c.width > 0),
     { timeout: 30000 },
   );
-  console.log("OK: continuous scroll renders");
+  console.log("OK: 縦読み (continuous) renders");
   await page.screenshot({ path: "e2e-continuous.png" });
-  await clickByText(page, "button", "ページめくり"); // back to paged
+  // reset zoom to 100% so the fit check is clean
+  await clickByText(page, "button", "%");
+  await sleep(500);
+  // 縦読み defaults to 全体表示 (page fit): a page should fit the viewport height
+  const slotFitsHeight = await page.evaluate(() => {
+    const sc = document.querySelector(".continuous-scroll");
+    const slot = document.querySelector(".continuous-scroll .page-slot");
+    if (!sc || !slot) return false;
+    return slot.getBoundingClientRect().height <= sc.clientHeight + 2;
+  });
+  if (!slotFitsHeight) throw new Error("縦読み 全体表示 did not fit page to viewport height");
+  console.log("OK: 縦読み 全体表示 fits page to height");
+  await clickByText(page, "button", "横読み"); // back to paged
   await sleep(300);
 
   // sub-100% zoom

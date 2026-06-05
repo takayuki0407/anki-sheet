@@ -350,6 +350,7 @@ body {
 
 /* Continuous (vertical scroll) reading mode */
 .continuous-scroll {
+  position: relative;
   overflow-y: auto;
   overflow-x: hidden;
   height: calc(100dvh - 250px);

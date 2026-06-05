@@ -222,6 +222,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
           revealed={revealed}
           onToggle={toggle}
           zoom={zoom}
+          fitMode={fitMode}
           jumpTo={pageIndex}
           jumpNonce={jumpNonce}
         />
@@ -246,16 +247,14 @@ export function PageViewer({ deckId }: { deckId: number }) {
             className="btn ghost sm"
             onClick={() => setMode((m) => (m === "paged" ? "scroll" : "paged"))}
           >
-            {mode === "paged" ? "連続スクロール" : "ページめくり"}
+            {mode === "paged" ? "縦読み" : "横読み"}
           </button>
-          {mode === "paged" && (
-            <button
-              className="btn ghost sm"
-              onClick={() => setFitMode((m) => (m === "page" ? "width" : "page"))}
-            >
-              {fitMode === "page" ? "幅に合わせる" : "全体表示"}
-            </button>
-          )}
+          <button
+            className="btn ghost sm"
+            onClick={() => setFitMode((m) => (m === "page" ? "width" : "page"))}
+          >
+            {fitMode === "page" ? "幅に合わせる" : "全体表示"}
+          </button>
           <button className="btn ghost sm" onClick={toggleFullscreen}>
             {isFullscreen ? "⤢ 解除" : "⛶ 全画面"}
           </button>

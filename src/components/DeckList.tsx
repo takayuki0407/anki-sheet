@@ -19,6 +19,17 @@ function dateStamp(): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
 }
 
+// Serialize cover generation so visiting the shelf doesn't parse every PDF at once.
+let coverChain: Promise<unknown> = Promise.resolve();
+function enqueueCover<T>(fn: () => Promise<T>): Promise<T> {
+  const run = coverChain.then(fn, fn);
+  coverChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 /** Cover thumbnail for a deck: cached in IndexedDB, generated lazily from page 1. */
 function useCover(deckId: number): string | null {
   const [url, setUrl] = useState<string | null>(null);
@@ -28,13 +39,18 @@ function useCover(deckId: number): string | null {
     (async () => {
       try {
         let cover = await getCover(deckId);
-        if (!cover) {
-          const pdf = await getDeckPdf(deckId);
-          if (pdf) {
+        if (!cover && !cancelled) {
+          cover = await enqueueCover(async () => {
+            if (cancelled) return undefined;
+            const existing = await getCover(deckId); // another mount may have made it
+            if (existing) return existing;
+            const pdf = await getDeckPdf(deckId);
+            if (!pdf || cancelled) return undefined;
             const blob = await renderCover(pdf.blob);
+            if (cancelled) return undefined; // don't write an orphan cover after delete
             await setCover(deckId, blob);
-            cover = { deckId, blob };
-          }
+            return { deckId, blob };
+          });
         }
         if (cover && !cancelled) {
           objectUrl = URL.createObjectURL(cover.blob);

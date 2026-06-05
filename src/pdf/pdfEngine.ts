@@ -49,13 +49,17 @@ function makeCanvas(w: number, h: number): HTMLCanvasElement {
 // keeps every render strictly sequential across the whole app.
 let renderLock: Promise<unknown> = Promise.resolve();
 
-/** Render a page into a 2D canvas at the given scale (serialized app-wide). */
+/** Render a page into a 2D canvas at the given scale (serialized app-wide). The
+ * optional shouldCancel is checked once the mutex frees, so a render queued for a
+ * page that has since scrolled away / unmounted is skipped instead of rasterized. */
 export async function renderPage(
   page: PDFPageProxy,
   scale: number,
   canvas?: HTMLCanvasElement,
+  shouldCancel?: () => boolean,
 ): Promise<HTMLCanvasElement> {
   const run = async () => {
+    if (shouldCancel?.()) return canvas ?? makeCanvas(1, 1);
     const viewport = page.getViewport({ scale });
     const c = canvas ?? makeCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
     c.width = Math.ceil(viewport.width);
