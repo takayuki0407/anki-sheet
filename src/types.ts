@@ -52,9 +52,6 @@ export interface DeckRow {
   name: string;
   createdAt: number;
   color: DeckColorConfig;
-  dailyNewLimit: number;
-  dailyReviewLimit: number;
-  requestRetention: number;
 }
 
 export interface PdfRow {
@@ -67,26 +64,13 @@ export interface PdfRow {
   pageH: number;
 }
 
-/** FSRS card state, flattened so `due` is indexable and dates serialize cleanly. */
-export interface FsrsState {
-  due: number; // epoch-ms
-  stability: number;
-  difficulty: number;
-  elapsed_days: number;
-  scheduled_days: number;
-  learning_steps: number;
-  reps: number;
-  lapses: number;
-  state: 0 | 1 | 2 | 3; // New | Learning | Review | Relearning
-  last_review: number | null; // epoch-ms
-}
-
-export interface CardRow extends FsrsState {
+/** One detected answer (the thing hidden under the red sheet). */
+export interface CardRow {
   id?: number;
   deckId: number;
   pdfId: number;
   pageIndex: number;
-  /** Answer sub-rects (page coordinates). */
+  /** Answer sub-rects, one per line (page coordinates). */
   rects: Rect[];
   /** Tight union mask rect (page coordinates). */
   answerRect: Rect;
@@ -94,19 +78,13 @@ export interface CardRow extends FsrsState {
   createdAt: number;
 }
 
-export interface ReviewLogRow {
+/** A user-defined bookmark/chapter entry to jump to in the viewer (the "目次"). */
+export interface BookmarkRow {
   id?: number;
-  cardId: number;
   deckId: number;
-  rating: number; // 1..4
-  state: number;
-  due: number;
-  stability: number;
-  difficulty: number;
-  elapsed_days: number;
-  last_elapsed_days: number;
-  scheduled_days: number;
-  review: number; // epoch-ms when the review happened
+  pageIndex: number;
+  title: string;
+  createdAt: number;
 }
 
 export interface MetaRow {

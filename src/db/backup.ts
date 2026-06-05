@@ -1,5 +1,5 @@
 import { db } from "./schema";
-import type { CardRow, DeckRow, MetaRow, PdfRow, ReviewLogRow } from "../types";
+import type { BookmarkRow, CardRow, DeckRow, MetaRow } from "../types";
 
 interface PdfExport {
   id?: number;
@@ -18,7 +18,7 @@ interface BackupFile {
   decks: DeckRow[];
   pdfs: PdfExport[];
   cards: CardRow[];
-  reviewLogs: ReviewLogRow[];
+  bookmarks: BookmarkRow[];
   meta: MetaRow[];
 }
 
@@ -37,11 +37,11 @@ async function dataURLToBlob(url: string): Promise<Blob> {
 
 /** Serialize the entire DB (incl. PDFs as base64) to a downloadable JSON Blob. */
 export async function exportBackup(): Promise<Blob> {
-  const [decks, pdfsRaw, cards, reviewLogs, meta] = await Promise.all([
+  const [decks, pdfsRaw, cards, bookmarks, meta] = await Promise.all([
     db.decks.toArray(),
     db.pdfs.toArray(),
     db.cards.toArray(),
-    db.reviewLogs.toArray(),
+    db.bookmarks.toArray(),
     db.meta.toArray(),
   ]);
   const pdfs: PdfExport[] = await Promise.all(
@@ -57,12 +57,12 @@ export async function exportBackup(): Promise<Blob> {
   );
   const data: BackupFile = {
     app: "anki-sheet",
-    version: 1,
+    version: 2,
     exportedAt: Date.now(),
     decks,
     pdfs,
     cards,
-    reviewLogs,
+    bookmarks,
     meta,
   };
   return new Blob([JSON.stringify(data)], { type: "application/json" });
@@ -74,7 +74,7 @@ export async function importBackup(file: File): Promise<void> {
   if (data.app !== "anki-sheet") throw new Error("Anki-sheetのバックアップではありません");
 
   // Decode blobs BEFORE the transaction (fetch is not allowed inside a Dexie tx).
-  const pdfRows: PdfRow[] = await Promise.all(
+  const pdfRows = await Promise.all(
     data.pdfs.map(async (p) => ({
       id: p.id,
       deckId: p.deckId,
@@ -86,18 +86,18 @@ export async function importBackup(file: File): Promise<void> {
     })),
   );
 
-  await db.transaction("rw", [db.decks, db.pdfs, db.cards, db.reviewLogs, db.meta], async () => {
+  await db.transaction("rw", [db.decks, db.pdfs, db.cards, db.bookmarks, db.meta], async () => {
     await Promise.all([
       db.decks.clear(),
       db.pdfs.clear(),
       db.cards.clear(),
-      db.reviewLogs.clear(),
+      db.bookmarks.clear(),
       db.meta.clear(),
     ]);
     await db.decks.bulkPut(data.decks);
     await db.pdfs.bulkPut(pdfRows);
     await db.cards.bulkPut(data.cards);
-    await db.reviewLogs.bulkPut(data.reviewLogs);
+    await db.bookmarks.bulkPut(data.bookmarks ?? []);
     await db.meta.bulkPut(data.meta ?? []);
   });
   await db.meta.put({ key: "lastBackup", value: Date.now() });

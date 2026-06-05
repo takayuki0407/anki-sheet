@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { deckCounts, deleteDeck, listDecks } from "../db/repo";
+import { answerCount, deleteDeck, listDecks } from "../db/repo";
 import { exportBackup, downloadBlob, importBackup } from "../db/backup";
 import { useApp } from "../store/session";
 import type { DeckRow } from "../types";
@@ -72,38 +72,25 @@ export function DeckList() {
 
 function DeckCard({ deck }: { deck: DeckRow }) {
   const setView = useApp((s) => s.setView);
-  const counts = useLiveQuery(() => deckCounts(deck.id!, Date.now()), [deck.id]);
+  const count = useLiveQuery(() => answerCount(deck.id!), [deck.id]);
 
   const onDelete = async () => {
-    if (confirm(`「${deck.name}」を削除しますか？（学習の進捗も消えます）`)) {
+    if (confirm(`「${deck.name}」を削除しますか？`)) {
       await deleteDeck(deck.id!);
     }
   };
 
-  const due = counts?.due ?? 0;
-  const newTotal = counts?.newTotal ?? 0;
-  const studyable = due + newTotal > 0;
-
   return (
     <li className="deck-card">
-      <div className="deck-main" onClick={() => setView({ name: "review", deckId: deck.id! })}>
+      <div className="deck-main" onClick={() => setView({ name: "viewer", deckId: deck.id! })}>
         <div className="deck-name">{deck.name}</div>
         <div className="deck-counts">
-          <span className="chip total">{counts?.total ?? "…"}枚</span>
-          <span className="chip due">復習 {due}</span>
-          <span className="chip new">新規 {newTotal}</span>
+          <span className="chip total">{count ?? "…"} 個の暗記</span>
         </div>
       </div>
       <div className="deck-actions">
         <button
           className="btn primary sm"
-          disabled={!studyable}
-          onClick={() => setView({ name: "review", deckId: deck.id! })}
-        >
-          学習
-        </button>
-        <button
-          className="btn sm"
           onClick={() => setView({ name: "viewer", deckId: deck.id! })}
         >
           めくる

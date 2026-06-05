@@ -3,7 +3,6 @@ import { create } from "zustand";
 export type View =
   | { name: "decks" }
   | { name: "import" }
-  | { name: "review"; deckId: number }
   | { name: "viewer"; deckId: number }
   | { name: "settings"; deckId: number };
 

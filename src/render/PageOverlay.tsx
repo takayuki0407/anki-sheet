@@ -9,26 +9,26 @@ export interface MaskGroup {
 }
 
 const EMPTY: ReadonlySet<string | number> = new Set();
+const MAX_DEVICE_W = 2800; // cap rendered canvas width (memory)
 
 interface Props {
   doc: PDFDocumentProxy;
   pageIndex: number; // 0-based
   pageW: number; // page coordinates (points)
-  /** Mask groups to cover with the red sheet (page coordinates). */
   groups?: MaskGroup[];
-  /** Group ids that are currently revealed (mask lifted). */
   revealedIds?: ReadonlySet<string | number>;
-  /** Toggle a single group's reveal (tap on its mask). */
   onToggle?: (id: string | number) => void;
-  /** Translucent highlight rects (tuner preview — what would be captured). */
+  /** Translucent highlight rects (tuner preview). */
   highlightRects?: Rect[];
+  /** Zoom factor (1 = fit width). Re-renders crisp per step, scrolls when > fit. */
+  zoom?: number;
   maxWidth?: number;
 }
 
 /**
- * Renders a PDF page to a canvas and overlays opaque "red sheet" rectangles over
- * each mask group. The single source of truth for PDF-bbox -> pixel mapping; backs
- * both the SRS reviewer and the standalone red-sheet viewer.
+ * Renders a PDF page to a canvas and overlays the red-sheet masks / highlights.
+ * The single source of truth for PDF-bbox -> pixel mapping. Supports zoom (the page
+ * is re-rendered at the zoomed scale, capped, and scrolls inside its container).
  */
 export function PageOverlay({
   doc,
@@ -38,27 +38,33 @@ export function PageOverlay({
   revealedIds = EMPTY,
   onToggle,
   highlightRects,
-  maxWidth = 760,
+  zoom = 1,
+  maxWidth = 900,
 }: Props) {
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [displayW, setDisplayW] = useState(0);
+  const [baseW, setBaseW] = useState(0);
   const renderToken = useRef(0);
 
   useLayoutEffect(() => {
-    const el = wrapRef.current;
+    const el = scrollRef.current;
     if (!el) return;
-    const update = () => setDisplayW(Math.min(el.clientWidth, maxWidth));
+    const update = () => {
+      const w = Math.min(el.clientWidth, maxWidth);
+      setBaseW((prev) => (Math.abs(prev - w) > 1 ? w : prev));
+    };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
   }, [maxWidth]);
 
+  const cssW = baseW * zoom;
+
   useEffect(() => {
-    if (!displayW) return;
+    if (!cssW) return;
     const dpr = window.devicePixelRatio || 1;
-    const fitScale = displayW / pageW;
+    const renderScale = Math.min((cssW / pageW) * dpr, MAX_DEVICE_W / pageW);
     const token = ++renderToken.current;
     let cancelled = false;
     (async () => {
@@ -69,24 +75,23 @@ export function PageOverlay({
       }
       const canvas = canvasRef.current;
       if (!canvas) return;
-      await renderPage(page, fitScale * dpr, canvas);
+      await renderPage(page, renderScale, canvas);
       if (token === renderToken.current) {
-        canvas.style.width = `${displayW}px`;
-        canvas.style.height = `${canvas.height / dpr}px`;
+        canvas.style.width = `${cssW}px`;
+        canvas.style.height = `${(cssW * canvas.height) / canvas.width}px`;
       }
       page.cleanup();
     })();
     return () => {
       cancelled = true;
     };
-  }, [doc, pageIndex, pageW, displayW]);
+  }, [doc, pageIndex, pageW, cssW]);
 
-  const fitScale = displayW ? displayW / pageW : 0;
-  const PAD = 1.5; // px, so anti-aliased glyph edges are fully covered
+  const fitScale = cssW ? cssW / pageW : 0;
 
   return (
-    <div className="page-overlay" ref={wrapRef}>
-      <div className="page-stage" style={{ width: displayW || undefined }}>
+    <div className="page-scroll" ref={scrollRef}>
+      <div className="page-stage" style={{ width: cssW || undefined }}>
         <canvas ref={canvasRef} className="page-canvas" />
         {fitScale > 0 &&
           groups.map((g) =>
@@ -97,10 +102,10 @@ export function PageOverlay({
                     key={`${g.id}:${i}`}
                     className="mask"
                     style={{
-                      left: r.x * fitScale - PAD,
-                      top: r.y * fitScale - PAD,
-                      width: r.w * fitScale + 2 * PAD,
-                      height: r.h * fitScale + 2 * PAD,
+                      left: r.x * fitScale,
+                      top: r.y * fitScale,
+                      width: r.w * fitScale,
+                      height: r.h * fitScale,
                     }}
                     onClick={(e) => {
                       e.stopPropagation();

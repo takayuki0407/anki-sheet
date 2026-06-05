@@ -16,7 +16,7 @@ type Status = "loading" | "ready" | "error";
 type Redetect =
   | { k: "idle" }
   | { k: "running"; page: number; total: number; found: number }
-  | { k: "done"; kept: number; added: number; removed: number };
+  | { k: "done"; count: number };
 
 export function Settings({ deckId }: { deckId: number }) {
   const setView = useApp((s) => s.setView);
@@ -28,9 +28,6 @@ export function Settings({ deckId }: { deckId: number }) {
 
   const [name, setName] = useState("");
   const [color, setColor] = useState<DeckColorConfig>(DEFAULT_MAGENTA_BAND);
-  const [newLimit, setNewLimit] = useState(20);
-  const [revLimit, setRevLimit] = useState(200);
-  const [retention, setRetention] = useState(0.9);
 
   const [previewPage, setPreviewPage] = useState(0);
   const [highlights, setHighlights] = useState<Rect[]>([]);
@@ -55,9 +52,6 @@ export function Settings({ deckId }: { deckId: number }) {
         setPdf(p);
         setName(d.name);
         setColor({ ...DEFAULT_MAGENTA_BAND, ...d.color });
-        setNewLimit(d.dailyNewLimit);
-        setRevLimit(d.dailyReviewLimit);
-        setRetention(d.requestRetention);
         setPreviewPage(await firstAnswerPage(deckId));
         setDocReady(true);
         setStatus("ready");
@@ -99,13 +93,7 @@ export function Settings({ deckId }: { deckId: number }) {
     setColor((c) => ({ ...c, [k]: v }));
 
   const saveSettings = async () => {
-    await updateDeck(deckId, {
-      name: name.trim() || "無題のデッキ",
-      color,
-      dailyNewLimit: newLimit,
-      dailyReviewLimit: revLimit,
-      requestRetention: retention,
-    });
+    await updateDeck(deckId, { name: name.trim() || "無題のデッキ", color });
     setView({ name: "decks" });
   };
 
@@ -113,8 +101,7 @@ export function Settings({ deckId }: { deckId: number }) {
     if (!pdf) return;
     if (
       !confirm(
-        "現在の色設定でこのPDFを再検出します。位置が一致するカードの学習進捗は保持され、" +
-          "新しい語句は追加、検出されなくなった語句は削除されます。実行しますか？",
+        "現在の色設定でこのPDFを再検出し、暗記箇所を作り直します。実行しますか？",
       )
     )
       return;
@@ -123,14 +110,9 @@ export function Settings({ deckId }: { deckId: number }) {
       const result = await detectClozesInPdf(pdf.blob, color, (page, total, found) =>
         setRedetect({ k: "running", page, total, found }),
       );
-      const r = await redetectDeck(deckId, color, result.clozes);
-      await updateDeck(deckId, {
-        name: name.trim() || "無題のデッキ",
-        dailyNewLimit: newLimit,
-        dailyReviewLimit: revLimit,
-        requestRetention: retention,
-      });
-      setRedetect({ k: "done", ...r });
+      const count = await redetectDeck(deckId, color, result.clozes);
+      await updateDeck(deckId, { name: name.trim() || "無題のデッキ" });
+      setRedetect({ k: "done", count });
     } catch (e) {
       setErrMsg(e instanceof Error ? e.message : String(e));
       setRedetect({ k: "idle" });
@@ -227,17 +209,9 @@ export function Settings({ deckId }: { deckId: number }) {
       <Slider label="見出し除外 (高さ倍率)" value={color.maxHeightRatio} min={1} max={4} step={0.1}
         onChange={(v) => set("maxHeightRatio", v)} />
 
-      <h3 className="section">学習設定</h3>
-      <Slider label="1日の新規カード上限" value={newLimit} min={0} max={200} step={5}
-        onChange={setNewLimit} />
-      <Slider label="1日の復習上限" value={revLimit} min={10} max={1000} step={10}
-        onChange={setRevLimit} />
-      <Slider label="目標保持率" value={retention} min={0.7} max={0.97} step={0.01}
-        onChange={setRetention} />
-
       <h3 className="section">再検出</h3>
       <p className="muted small">
-        色や感度を変えたら再検出してカードを作り直せます（一致するカードの進捗は保持）。
+        色や感度を変えたら、このPDFを再検出して暗記箇所を作り直せます。
       </p>
       {redetect.k === "running" && (
         <div className="progress-box">
@@ -248,9 +222,7 @@ export function Settings({ deckId }: { deckId: number }) {
         </div>
       )}
       {redetect.k === "done" && (
-        <p className="ok-note">
-          完了: 保持 {redetect.kept} ・ 追加 {redetect.added} ・ 削除 {redetect.removed}
-        </p>
+        <p className="ok-note">完了: {redetect.count} 個の暗記箇所を検出しました</p>
       )}
       <button
         className="btn"
