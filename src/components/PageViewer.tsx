@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { addBookmark, deckCards, deleteBookmark, getDeck, getDeckPdf, listBookmarks } from "../db/repo";
+import {
+  addBookmark,
+  deckCards,
+  deleteBookmark,
+  getDeck,
+  getDeckPdf,
+  listBookmarks,
+  updateDeck,
+} from "../db/repo";
 import { loadPdf } from "../pdf/pdfEngine";
 import { PageOverlay, type FitMode, type MaskGroup } from "../render/PageOverlay";
 import { ContinuousView } from "./ContinuousView";
@@ -18,6 +26,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [status, setStatus] = useState<Status>("loading");
   const [errMsg, setErrMsg] = useState("");
   const [pdf, setPdf] = useState<PdfRow>();
+  const [deckName, setDeckName] = useState("");
   const docRef = useRef<PDFDocumentProxy | null>(null);
   const [docReady, setDocReady] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
@@ -77,7 +86,9 @@ export function PageViewer({ deckId }: { deckId: number }) {
         }
         docRef.current = doc;
         setPdf(p);
-        setPageIndex(0);
+        setDeckName(d.name);
+        // reopen where we left off
+        setPageIndex(Math.max(0, Math.min(p.pageCount - 1, d.lastPage ?? 0)));
         setSheetOn(true);
         setRevealed(new Set());
         setDocReady(true);
@@ -98,10 +109,22 @@ export function PageViewer({ deckId }: { deckId: number }) {
   }, [deckId]);
 
   const pageCount = pdf?.pageCount ?? 1;
+  const percent = pageCount > 0 ? Math.round(((pageIndex + 1) / pageCount) * 100) : 0;
   const goTo = (p: number) => setPageIndex(Math.max(0, Math.min(pageCount - 1, p)));
   const jumpToPage = (p: number) => {
     goTo(p);
     setJumpNonce((n) => n + 1); // tells ContinuousView to scroll there
+  };
+
+  // Remember the reading position (debounced while reading + on exit).
+  useEffect(() => {
+    if (status !== "ready") return;
+    const id = setTimeout(() => void updateDeck(deckId, { lastPage: pageIndex }), 700);
+    return () => clearTimeout(id);
+  }, [pageIndex, status, deckId]);
+  const exit = () => {
+    if (status === "ready") void updateDeck(deckId, { lastPage: pageIndex });
+    setView({ name: "decks" });
   };
   const stepZoom = (dir: 1 | -1) => {
     const i = ZOOMS.indexOf(zoom);
@@ -177,14 +200,14 @@ export function PageViewer({ deckId }: { deckId: number }) {
   return (
     <div className="viewer" ref={viewerRef}>
       <div className="review-bar">
-        <button className="btn ghost sm" onClick={() => setView({ name: "decks" })}>
+        <button className="btn ghost sm" onClick={exit}>
           終了
         </button>
         <button className="btn ghost sm" onClick={() => setTocOpen(true)}>
           目次
         </button>
-        <span className="review-progress">
-          {mode === "paged" ? `${pageIndex + 1} / ${pageCount}` : `全 ${pageCount} ページ`}
+        <span className="book-title-bar" title={deckName}>
+          {deckName}
         </span>
         <button
           className={`btn sm ${sheetOn ? "primary" : "ghost"}`}
@@ -208,6 +231,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
           onToggle={(id) => toggle(id as number)}
           fitMode={fitMode}
           zoom={zoom}
+          onTapZone={(dir) => goTo(pageIndex + dir)}
           maxWidth={1600}
         />
       )}
@@ -225,6 +249,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
           fitMode={fitMode}
           jumpTo={pageIndex}
           jumpNonce={jumpNonce}
+          onVisiblePage={setPageIndex}
         />
       )}
 
@@ -287,6 +312,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
             </button>
           </>
         )}
+        <span className="page-status">
+          {pageIndex + 1} / {pageCount}
+          <span className="page-pct">{percent}%</span>
+        </span>
       </div>
 
       {tocOpen && (

@@ -52,6 +52,8 @@ export interface DeckRow {
   name: string;
   createdAt: number;
   color: DeckColorConfig;
+  /** Last-read page (0-based) so the book reopens where you left off. */
+  lastPage?: number;
 }
 
 export interface PdfRow {

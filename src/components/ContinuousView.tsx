@@ -22,6 +22,8 @@ interface Props {
   /** Scroll to this page when jumpNonce changes (目次 / jump / mode switch). */
   jumpTo?: number;
   jumpNonce?: number;
+  /** Reports the top visible page as the user scrolls. */
+  onVisiblePage?: (page: number) => void;
 }
 
 /**
@@ -46,10 +48,13 @@ export function ContinuousView({
   fitMode,
   jumpTo,
   jumpNonce,
+  onVisiblePage,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const appliedNonce = useRef<number | undefined>(undefined);
+  const ticking = useRef(false);
+  const lastReported = useRef(-1);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -87,8 +92,24 @@ export function ContinuousView({
     }
   }, [jumpNonce, cssW, jumpTo]);
 
+  const onScroll = () => {
+    if (ticking.current || !onVisiblePage || !cssW) return;
+    ticking.current = true;
+    requestAnimationFrame(() => {
+      ticking.current = false;
+      const el = scrollRef.current;
+      if (!el) return;
+      const pitch = (cssW * pageH) / pageW + 12; // slot height + margin
+      const p = Math.max(0, Math.min(pageCount - 1, Math.round((el.scrollTop - 8) / pitch)));
+      if (p !== lastReported.current) {
+        lastReported.current = p;
+        onVisiblePage(p);
+      }
+    });
+  };
+
   return (
-    <div className="continuous-scroll" ref={scrollRef}>
+    <div className="continuous-scroll" ref={scrollRef} onScroll={onScroll}>
       {cssW > 0 &&
         Array.from({ length: pageCount }, (_, i) => (
           <PageSlot

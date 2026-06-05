@@ -97,6 +97,21 @@ try {
   if (!hasFs) throw new Error("no fullscreen button");
   console.log("OK: fullscreen button present");
 
+  // Kindle-style tap zones: tap right -> next page, tap left -> previous
+  const pageNum = () => page.$eval(".page-status", (e) => parseInt(e.innerText));
+  const stage = await page.$(".page-stage");
+  const box = await stage.boundingBox();
+  const tp0 = await pageNum();
+  await page.mouse.click(box.x + box.width * 0.85, box.y + box.height * 0.95);
+  await sleep(350);
+  const tp1 = await pageNum();
+  if (tp1 !== tp0 + 1) throw new Error(`right tap did not advance (${tp0}->${tp1})`);
+  await page.mouse.click(box.x + box.width * 0.15, box.y + box.height * 0.95);
+  await sleep(350);
+  const tp2 = await pageNum();
+  if (tp2 !== tp0) throw new Error(`left tap did not go back (${tp1}->${tp2})`);
+  console.log(`OK: tap zones (${tp0} -> ${tp1} -> ${tp2})`);
+
   // zoom
   const w1 = await canvasW();
   await clickByText(page, "button", "＋");
@@ -114,10 +129,10 @@ try {
       setter.call(inp, v);
       inp.dispatchEvent(new Event("input", { bubbles: true }));
     }, v);
-  const before = await page.$eval(".review-progress", (e) => e.innerText);
+  const before = await page.$eval(".page-status", (e) => e.innerText);
   await setPageInput("50");
   await sleep(600);
-  const after = await page.$eval(".review-progress", (e) => e.innerText);
+  const after = await page.$eval(".page-status", (e) => e.innerText);
   if (after === before || !after.startsWith("50 ")) throw new Error(`page jump failed (${before}->${after})`);
   console.log(`OK: page jump ${before.trim()} -> ${after.trim()}`);
 
@@ -134,7 +149,7 @@ try {
   await page.waitForSelector(".toc-jump", { timeout: 5000 });
   await page.click(".toc-jump");
   await sleep(400);
-  const jumped = await page.$eval(".review-progress", (e) => e.innerText);
+  const jumped = await page.$eval(".page-status", (e) => e.innerText);
   if (!jumped.startsWith("50 ")) throw new Error("TOC jump failed: " + jumped);
   console.log("OK: TOC jump ->", jumped.trim());
 
@@ -175,6 +190,17 @@ try {
   });
   if (!(parseInt(pct) < 100)) throw new Error("zoom did not go below 100%: " + pct);
   console.log("OK: sub-100% zoom (" + pct + ")");
+
+  // last-page restore: exit and reopen returns to the same page
+  const lpBefore = await pageNum();
+  await clickByText(page, "button", "終了");
+  await page.waitForSelector(".book", { timeout: 15000 });
+  await page.click(".book-cover");
+  await page.waitForSelector(".page-status", { timeout: 30000 });
+  await sleep(800);
+  const lpAfter = await pageNum();
+  if (lpAfter !== lpBefore) throw new Error(`last-page restore failed (${lpBefore} -> ${lpAfter})`);
+  console.log(`OK: reopened at last page (${lpAfter})`);
 
   // --- settings tuner ---
   await clickByText(page, "button", "終了");

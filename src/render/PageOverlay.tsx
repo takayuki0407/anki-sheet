@@ -26,6 +26,8 @@ interface Props {
   fitMode?: FitMode;
   /** Zoom factor relative to the fit base (can be < 1). */
   zoom?: number;
+  /** Tap the left third to go back, the right third to go forward (Kindle-style). */
+  onTapZone?: (dir: -1 | 1) => void;
   maxWidth?: number;
 }
 
@@ -45,6 +47,7 @@ export function PageOverlay({
   highlightRects,
   fitMode = "width",
   zoom = 1,
+  onTapZone,
   maxWidth = 900,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -104,7 +107,17 @@ export function PageOverlay({
 
   return (
     <div className="page-scroll" ref={scrollRef}>
-      <div className="page-stage" style={{ width: cssW || undefined }}>
+      <div
+        className={`page-stage${onTapZone ? " tappable" : ""}`}
+        style={{ width: cssW || undefined }}
+        onClick={(e) => {
+          if (!onTapZone) return;
+          const r = e.currentTarget.getBoundingClientRect();
+          const f = (e.clientX - r.left) / r.width;
+          if (f < 0.33) onTapZone(-1);
+          else if (f > 0.67) onTapZone(1);
+        }}
+      >
         <canvas ref={canvasRef} className="page-canvas" />
         {fitScale > 0 &&
           groups.map((g) => {
