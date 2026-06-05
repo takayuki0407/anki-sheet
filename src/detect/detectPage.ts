@@ -47,6 +47,11 @@ export function plausibleContinuation(prev: Rect, next: Rect): boolean {
   return false;
 }
 
+interface Answer {
+  rects: Rect[];
+  text: string;
+}
+
 /** Union rects that share a text line into one rect per line. */
 export function mergePerLine(rects: Rect[]): Rect[] {
   const sorted = [...rects].sort((a, b) => yc(a) - yc(b) || a.x - b.x);
@@ -77,8 +82,8 @@ export function detectPage(
   cfg: DeckColorConfig,
   scale: number,
 ): DetectedCloze[] {
-  const answers: { rects: Rect[]; text: string }[] = [];
-  let cur: { rects: Rect[]; text: string } | null = null;
+  const answers: Answer[] = [];
+  let cur: Answer | null = null;
 
   for (const run of runs) {
     if (!run.str || !run.str.trim()) continue; // skip whitespace-only runs

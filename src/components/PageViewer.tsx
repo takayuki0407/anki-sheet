@@ -31,6 +31,22 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [zoom, setZoom] = useState(1);
   const [fitMode, setFitMode] = useState<FitMode>("page");
   const [tocOpen, setTocOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const viewerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await viewerRef.current?.requestFullscreen();
+    } catch {
+      /* fullscreen may be blocked; ignore */
+    }
+  };
 
   const bookmarks = useLiveQuery(() => listBookmarks(deckId), [deckId]) ?? [];
 
@@ -129,12 +145,12 @@ export function PageViewer({ deckId }: { deckId: number }) {
     );
 
   const doc = docRef.current;
-  const groups: MaskGroup[] = (cards ?? []).map((c) => ({
-    id: c.id!,
-    rects: c.rects.length ? c.rects : [c.answerRect],
-  }));
-  const allIds = new Set<string | number>(groups.map((g) => g.id));
-  const revealedIds: ReadonlySet<string | number> = sheetOn ? revealed : allIds;
+  // Sheet OFF = show everything: render no mask layer at all (avoids dead clicks
+  // and keeps the per-answer reveal state clean). Sheet ON = masks, with the
+  // individually-revealed answers shown.
+  const groups: MaskGroup[] = sheetOn
+    ? (cards ?? []).map((c) => ({ id: c.id!, rects: c.rects.length ? c.rects : [c.answerRect] }))
+    : [];
   const toggle = (id: string | number) =>
     setRevealed((s) => {
       const n = new Set(s);
@@ -149,7 +165,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
   };
 
   return (
-    <div className="viewer">
+    <div className="viewer" ref={viewerRef}>
       <div className="review-bar">
         <button className="btn ghost sm" onClick={() => setView({ name: "decks" })}>
           終了
@@ -162,7 +178,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
         </span>
         <button
           className={`btn sm ${sheetOn ? "primary" : "ghost"}`}
-          onClick={() => setSheetOn((v) => !v)}
+          onClick={() => {
+            setSheetOn((v) => !v);
+            setRevealed(new Set()); // putting the sheet back ON hides everything again
+          }}
         >
           赤シート {sheetOn ? "ON" : "OFF"}
         </button>
@@ -175,7 +194,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
           pageW={pdf.pageW}
           pageH={pdf.pageH}
           groups={groups}
-          revealedIds={revealedIds}
+          revealedIds={revealed}
           onToggle={toggle}
           fitMode={fitMode}
           zoom={zoom}
@@ -203,6 +222,9 @@ export function PageViewer({ deckId }: { deckId: number }) {
             onClick={() => setFitMode((m) => (m === "page" ? "width" : "page"))}
           >
             {fitMode === "page" ? "幅に合わせる" : "全体表示"}
+          </button>
+          <button className="btn ghost sm" onClick={toggleFullscreen}>
+            {isFullscreen ? "⤢ 解除" : "⛶ 全画面"}
           </button>
           <span className="muted spacer">{groups.length} 個の暗記</span>
         </div>

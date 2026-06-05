@@ -296,6 +296,15 @@ body {
   max-height: 56vh;
   display: block;
 }
+/* Fullscreen viewer: fill the screen and give the page more room. */
+.viewer:fullscreen {
+  background: var(--bg);
+  padding: 10px 14px;
+  box-sizing: border-box;
+}
+.viewer:fullscreen .page-scroll {
+  height: calc(100dvh - 160px);
+}
 .page-stage {
   position: relative;
   line-height: 0;
@@ -314,6 +323,16 @@ body {
   border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
   cursor: pointer;
+}
+/* A revealed answer stays clickable so it can be hidden again. */
+.reveal-zone {
+  position: absolute;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.reveal-zone:hover {
+  background: rgba(220, 38, 38, 0.08);
+  box-shadow: inset 0 0 0 1.5px rgba(220, 38, 38, 0.45);
 }
 .highlight {
   position: absolute;

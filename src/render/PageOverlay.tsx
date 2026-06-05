@@ -107,26 +107,26 @@ export function PageOverlay({
       <div className="page-stage" style={{ width: cssW || undefined }}>
         <canvas ref={canvasRef} className="page-canvas" />
         {fitScale > 0 &&
-          groups.map((g) =>
-            revealedIds.has(g.id)
-              ? null
-              : g.rects.map((r, i) => (
-                  <div
-                    key={`${g.id}:${i}`}
-                    className="mask"
-                    style={{
-                      left: r.x * fitScale,
-                      top: r.y * fitScale,
-                      width: r.w * fitScale,
-                      height: r.h * fitScale,
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggle?.(g.id);
-                    }}
-                  />
-                )),
-          )}
+          groups.map((g) => {
+            const revealed = revealedIds.has(g.id);
+            // Both states stay clickable so a revealed answer can be hidden again.
+            return g.rects.map((r, i) => (
+              <div
+                key={`${g.id}:${i}`}
+                className={revealed ? "reveal-zone" : "mask"}
+                style={{
+                  left: r.x * fitScale,
+                  top: r.y * fitScale,
+                  width: r.w * fitScale,
+                  height: r.h * fitScale,
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggle?.(g.id);
+                }}
+              />
+            ));
+          })}
         {fitScale > 0 &&
           highlightRects?.map((r, i) => (
             <div

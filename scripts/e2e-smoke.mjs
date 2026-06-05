@@ -79,6 +79,23 @@ try {
   await clickByText(page, "button", "赤シート OFF"); // back on
   await sleep(300);
 
+  // tap an answer to reveal, tap again to re-hide
+  const mBase = await masks();
+  await page.click(".mask");
+  await sleep(250);
+  const mRevealed = await masks();
+  if (!(mRevealed < mBase)) throw new Error("tap did not reveal");
+  await page.click(".reveal-zone");
+  await sleep(250);
+  const mRehid = await masks();
+  if (!(mRehid > mRevealed)) throw new Error("re-tap did not re-hide");
+  console.log(`OK: tap reveal + re-hide (${mBase} -> ${mRevealed} -> ${mRehid})`);
+  const hasFs = await page.evaluate(() =>
+    [...document.querySelectorAll("button")].some((b) => b.textContent.includes("全画面")),
+  );
+  if (!hasFs) throw new Error("no fullscreen button");
+  console.log("OK: fullscreen button present");
+
   // zoom
   const w1 = await canvasW();
   await clickByText(page, "button", "＋");
