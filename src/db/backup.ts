@@ -86,20 +86,25 @@ export async function importBackup(file: File): Promise<void> {
     })),
   );
 
-  await db.transaction("rw", [db.decks, db.pdfs, db.cards, db.bookmarks, db.meta], async () => {
-    await Promise.all([
-      db.decks.clear(),
-      db.pdfs.clear(),
-      db.cards.clear(),
-      db.bookmarks.clear(),
-      db.meta.clear(),
-    ]);
-    await db.decks.bulkPut(data.decks);
-    await db.pdfs.bulkPut(pdfRows);
-    await db.cards.bulkPut(data.cards);
-    await db.bookmarks.bulkPut(data.bookmarks ?? []);
-    await db.meta.bulkPut(data.meta ?? []);
-  });
+  await db.transaction(
+    "rw",
+    [db.decks, db.pdfs, db.cards, db.bookmarks, db.covers, db.meta],
+    async () => {
+      await Promise.all([
+        db.decks.clear(),
+        db.pdfs.clear(),
+        db.cards.clear(),
+        db.bookmarks.clear(),
+        db.covers.clear(), // covers regenerate lazily from the PDFs
+        db.meta.clear(),
+      ]);
+      await db.decks.bulkPut(data.decks);
+      await db.pdfs.bulkPut(pdfRows);
+      await db.cards.bulkPut(data.cards);
+      await db.bookmarks.bulkPut(data.bookmarks ?? []);
+      await db.meta.bulkPut(data.meta ?? []);
+    },
+  );
   await db.meta.put({ key: "lastBackup", value: Date.now() });
 }
 

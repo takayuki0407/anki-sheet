@@ -1,11 +1,12 @@
 import Dexie, { type Table } from "dexie";
-import type { BookmarkRow, CardRow, DeckRow, MetaRow, PdfRow } from "../types";
+import type { BookmarkRow, CardRow, CoverRow, DeckRow, MetaRow, PdfRow } from "../types";
 
 export class AnkiSheetDB extends Dexie {
   decks!: Table<DeckRow, number>;
   pdfs!: Table<PdfRow, number>;
   cards!: Table<CardRow, number>;
   bookmarks!: Table<BookmarkRow, number>;
+  covers!: Table<CoverRow, number>;
   meta!: Table<MetaRow, string>;
 
   constructor() {
@@ -25,6 +26,10 @@ export class AnkiSheetDB extends Dexie {
       cards: "++id, deckId, pdfId, [deckId+pageIndex]",
       reviewLogs: null,
       bookmarks: "++id, deckId, [deckId+pageIndex]",
+    });
+    // v4: cached cover thumbnails (keyed by deckId).
+    this.version(4).stores({
+      covers: "deckId",
     });
   }
 }

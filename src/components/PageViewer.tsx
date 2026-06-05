@@ -1,23 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import {
-  addBookmark,
-  cardsOnPage,
-  deleteBookmark,
-  getDeck,
-  getDeckPdf,
-  listBookmarks,
-} from "../db/repo";
+import { addBookmark, deckCards, deleteBookmark, getDeck, getDeckPdf, listBookmarks } from "../db/repo";
 import { loadPdf } from "../pdf/pdfEngine";
 import { PageOverlay, type FitMode, type MaskGroup } from "../render/PageOverlay";
+import { ContinuousView } from "./ContinuousView";
 import { useApp } from "../store/session";
-import type { PdfRow } from "../types";
+import type { CardRow, PdfRow } from "../types";
 
 type Status = "loading" | "ready" | "error";
+type Mode = "paged" | "scroll";
 const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3, 4];
 
-/** Standalone digital red sheet: page through a PDF, hide/show answers, tap to peek. */
+/** Standalone digital red sheet: page through (or scroll) a PDF, hide/show answers. */
 export function PageViewer({ deckId }: { deckId: number }) {
   const setView = useApp((s) => s.setView);
   const [status, setStatus] = useState<Status>("loading");
@@ -30,6 +25,8 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [zoom, setZoom] = useState(1);
   const [fitMode, setFitMode] = useState<FitMode>("page");
+  const [mode, setMode] = useState<Mode>("paged");
+  const [jumpNonce, setJumpNonce] = useState(0);
   const [tocOpen, setTocOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const viewerRef = useRef<HTMLDivElement>(null);
@@ -49,6 +46,19 @@ export function PageViewer({ deckId }: { deckId: number }) {
   };
 
   const bookmarks = useLiveQuery(() => listBookmarks(deckId), [deckId]) ?? [];
+  const allCards = useLiveQuery(
+    () => (status === "ready" ? deckCards(deckId) : Promise.resolve([])),
+    [deckId, status],
+  );
+  const cardsByPage = useMemo(() => {
+    const m = new Map<number, CardRow[]>();
+    for (const c of allCards ?? []) {
+      const arr = m.get(c.pageIndex) ?? [];
+      arr.push(c);
+      m.set(c.pageIndex, arr);
+    }
+    return m;
+  }, [allCards]);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,30 +97,36 @@ export function PageViewer({ deckId }: { deckId: number }) {
     };
   }, [deckId]);
 
-  useEffect(() => {
-    setRevealed(new Set());
-  }, [pageIndex]);
-
-  const cards = useLiveQuery(
-    () => (status === "ready" ? cardsOnPage(deckId, pageIndex) : Promise.resolve([])),
-    [deckId, pageIndex, status],
-  );
-
   const pageCount = pdf?.pageCount ?? 1;
   const goTo = (p: number) => setPageIndex(Math.max(0, Math.min(pageCount - 1, p)));
+  const jumpToPage = (p: number) => {
+    goTo(p);
+    setJumpNonce((n) => n + 1); // tells ContinuousView to scroll there
+  };
   const stepZoom = (dir: 1 | -1) => {
     const i = ZOOMS.indexOf(zoom);
     const ni = Math.max(0, Math.min(ZOOMS.length - 1, (i < 0 ? 0 : i) + dir));
     setZoom(ZOOMS[ni]);
   };
+  const toggle = (id: number) =>
+    setRevealed((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
-  // Keyboard: ←/→ pages, Space toggles the sheet, +/- zoom, Home/End first/last.
-  const kref = useRef({ active: false, goTo, stepZoom, toggle: () => {}, pageIndex, pageCount });
+  // Keyboard: Space toggles the sheet, +/- zoom; in paged mode ←/→/Home/End navigate.
+  const kref = useRef({ active: false, mode, goTo, stepZoom, toggle: () => {}, pageIndex, pageCount });
   kref.current = {
     active: status === "ready",
+    mode,
     goTo,
     stepZoom,
-    toggle: () => setSheetOn((v) => !v),
+    toggle: () => {
+      setSheetOn((v) => !v);
+      setRevealed(new Set());
+    },
     pageIndex,
     pageCount,
   };
@@ -118,10 +134,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
     const h = (e: KeyboardEvent) => {
       const k = kref.current;
       if (!k.active || (e.target as HTMLElement)?.tagName === "INPUT") return;
-      if (e.key === "ArrowLeft") k.goTo(k.pageIndex - 1);
-      else if (e.key === "ArrowRight") k.goTo(k.pageIndex + 1);
-      else if (e.key === "Home") k.goTo(0);
-      else if (e.key === "End") k.goTo(k.pageCount - 1);
+      if (k.mode === "paged" && e.key === "ArrowLeft") k.goTo(k.pageIndex - 1);
+      else if (k.mode === "paged" && e.key === "ArrowRight") k.goTo(k.pageIndex + 1);
+      else if (k.mode === "paged" && e.key === "Home") k.goTo(0);
+      else if (k.mode === "paged" && e.key === "End") k.goTo(k.pageCount - 1);
       else if (e.key === "+" || e.key === "=") k.stepZoom(1);
       else if (e.key === "-") k.stepZoom(-1);
       else if (e.key === " ") {
@@ -145,24 +161,18 @@ export function PageViewer({ deckId }: { deckId: number }) {
     );
 
   const doc = docRef.current;
-  // Sheet OFF = show everything: render no mask layer at all (avoids dead clicks
-  // and keeps the per-answer reveal state clean). Sheet ON = masks, with the
-  // individually-revealed answers shown.
+  const currentCards = cardsByPage.get(pageIndex) ?? [];
+  // Sheet OFF = show everything: render no mask layer (no dead clicks, clean state).
   const groups: MaskGroup[] = sheetOn
-    ? (cards ?? []).map((c) => ({ id: c.id!, rects: c.rects.length ? c.rects : [c.answerRect] }))
+    ? currentCards.map((c) => ({ id: c.id!, rects: c.rects.length ? c.rects : [c.answerRect] }))
     : [];
-  const toggle = (id: string | number) =>
-    setRevealed((s) => {
-      const n = new Set(s);
-      if (n.has(id as number)) n.delete(id as number);
-      else n.add(id as number);
-      return n;
-    });
 
   const addCurrentBookmark = async () => {
     const title = window.prompt("しおりの名前（章・節など）", `${pageIndex + 1}ページ`);
     if (title && title.trim()) await addBookmark(deckId, pageIndex, title.trim());
   };
+
+  const ready = doc && docReady && pdf;
 
   return (
     <div className="viewer" ref={viewerRef}>
@@ -174,20 +184,20 @@ export function PageViewer({ deckId }: { deckId: number }) {
           目次
         </button>
         <span className="review-progress">
-          {pageIndex + 1} / {pageCount}
+          {mode === "paged" ? `${pageIndex + 1} / ${pageCount}` : `全 ${pageCount} ページ`}
         </span>
         <button
           className={`btn sm ${sheetOn ? "primary" : "ghost"}`}
           onClick={() => {
             setSheetOn((v) => !v);
-            setRevealed(new Set()); // putting the sheet back ON hides everything again
+            setRevealed(new Set());
           }}
         >
           赤シート {sheetOn ? "ON" : "OFF"}
         </button>
       </div>
 
-      {doc && docReady && pdf && (
+      {ready && mode === "paged" && (
         <PageOverlay
           doc={doc}
           pageIndex={pageIndex}
@@ -195,10 +205,25 @@ export function PageViewer({ deckId }: { deckId: number }) {
           pageH={pdf.pageH}
           groups={groups}
           revealedIds={revealed}
-          onToggle={toggle}
+          onToggle={(id) => toggle(id as number)}
           fitMode={fitMode}
           zoom={zoom}
           maxWidth={1600}
+        />
+      )}
+      {ready && mode === "scroll" && (
+        <ContinuousView
+          doc={doc}
+          pageCount={pageCount}
+          pageW={pdf.pageW}
+          pageH={pdf.pageH}
+          cardsByPage={cardsByPage}
+          sheetOn={sheetOn}
+          revealed={revealed}
+          onToggle={toggle}
+          zoom={zoom}
+          jumpTo={pageIndex}
+          jumpNonce={jumpNonce}
         />
       )}
 
@@ -219,43 +244,52 @@ export function PageViewer({ deckId }: { deckId: number }) {
           </button>
           <button
             className="btn ghost sm"
-            onClick={() => setFitMode((m) => (m === "page" ? "width" : "page"))}
+            onClick={() => setMode((m) => (m === "paged" ? "scroll" : "paged"))}
           >
-            {fitMode === "page" ? "幅に合わせる" : "全体表示"}
+            {mode === "paged" ? "連続スクロール" : "ページめくり"}
           </button>
+          {mode === "paged" && (
+            <button
+              className="btn ghost sm"
+              onClick={() => setFitMode((m) => (m === "page" ? "width" : "page"))}
+            >
+              {fitMode === "page" ? "幅に合わせる" : "全体表示"}
+            </button>
+          )}
           <button className="btn ghost sm" onClick={toggleFullscreen}>
             {isFullscreen ? "⤢ 解除" : "⛶ 全画面"}
           </button>
-          <span className="muted spacer">{groups.length} 個の暗記</span>
         </div>
-        <div className="nav-row">
-          <button className="btn" disabled={pageIndex <= 0} onClick={() => goTo(pageIndex - 1)}>
-            ← 前
-          </button>
-          <input
-            type="range"
-            className="page-slider"
-            min={1}
-            max={pageCount}
-            value={pageIndex + 1}
-            onChange={(e) => goTo(Number(e.target.value) - 1)}
-          />
-          <input
-            type="number"
-            className="page-input"
-            min={1}
-            max={pageCount}
-            value={pageIndex + 1}
-            onChange={(e) => goTo(Number(e.target.value) - 1)}
-          />
-          <button
-            className="btn"
-            disabled={pageIndex >= pageCount - 1}
-            onClick={() => goTo(pageIndex + 1)}
-          >
-            次 →
-          </button>
-        </div>
+        {mode === "paged" && (
+          <div className="nav-row">
+            <button className="btn" disabled={pageIndex <= 0} onClick={() => goTo(pageIndex - 1)}>
+              ← 前
+            </button>
+            <input
+              type="range"
+              className="page-slider"
+              min={1}
+              max={pageCount}
+              value={pageIndex + 1}
+              onChange={(e) => goTo(Number(e.target.value) - 1)}
+            />
+            <input
+              type="number"
+              className="page-input"
+              min={1}
+              max={pageCount}
+              value={pageIndex + 1}
+              onChange={(e) => goTo(Number(e.target.value) - 1)}
+            />
+            <button
+              className="btn"
+              disabled={pageIndex >= pageCount - 1}
+              onClick={() => goTo(pageIndex + 1)}
+            >
+              次 →
+            </button>
+          </div>
+        )}
       </div>
 
       {tocOpen && (
@@ -281,7 +315,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
                   <button
                     className="toc-jump"
                     onClick={() => {
-                      goTo(b.pageIndex);
+                      jumpToPage(b.pageIndex);
                       setTocOpen(false);
                     }}
                   >

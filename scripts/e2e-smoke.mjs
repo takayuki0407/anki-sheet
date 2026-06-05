@@ -39,7 +39,7 @@ const canvasW = () => page.$eval(".page-canvas", (c) => c.getBoundingClientRect(
 
 try {
   await page.goto(URL, { waitUntil: "networkidle2", timeout: 60000 });
-  await waitText(page, "デッキ", 30000);
+  await waitText(page, "本棚", 30000);
   console.log("OK: app loaded");
 
   await clickByText(page, "button", "PDFを取り込む");
@@ -51,13 +51,14 @@ try {
   console.log("OK: detection ->", count);
 
   await clickByText(page, "button", "このデッキを作成");
-  await page.waitForSelector(".deck-card", { timeout: 30000 });
+  await page.waitForSelector(".book", { timeout: 30000 });
   await waitText(page, "個の暗記", 30000);
-  await page.screenshot({ path: "e2e-decklist.png" });
-  console.log("OK: deck created");
+  await page.waitForSelector(".book-cover img", { timeout: 20000 }); // cover thumbnail
+  await page.screenshot({ path: "e2e-bookshelf.png" });
+  console.log("OK: bookshelf + cover thumbnail");
 
   // --- viewer ---
-  await page.click(".deck-main");
+  await page.click(".book-cover");
   await page.waitForSelector(".page-canvas", { timeout: 30000 });
   await page.waitForFunction(() => document.querySelector(".page-canvas")?.width > 0, { timeout: 30000 });
 
@@ -137,9 +138,36 @@ try {
   if (!jumped.startsWith("50 ")) throw new Error("TOC jump failed: " + jumped);
   console.log("OK: TOC jump ->", jumped.trim());
 
+  // --- continuous scroll mode ---
+  await clickByText(page, "button", "連続スクロール");
+  await page.waitForSelector(".continuous-scroll .page-slot", { timeout: 15000 });
+  await page.waitForFunction(
+    () => {
+      const c = document.querySelector(".continuous-scroll .page-canvas");
+      return c && c.width > 0;
+    },
+    { timeout: 30000 },
+  );
+  console.log("OK: continuous scroll renders");
+  await page.screenshot({ path: "e2e-continuous.png" });
+  await clickByText(page, "button", "ページめくり"); // back to paged
+  await sleep(300);
+
+  // sub-100% zoom
+  await clickByText(page, "button", "－");
+  await sleep(250);
+  await clickByText(page, "button", "－");
+  await sleep(250);
+  const pct = await page.evaluate(() => {
+    const b = [...document.querySelectorAll(".zoom-row button")].find((x) => x.textContent.includes("%"));
+    return b ? b.textContent.trim() : "";
+  });
+  if (!(parseInt(pct) < 100)) throw new Error("zoom did not go below 100%: " + pct);
+  console.log("OK: sub-100% zoom (" + pct + ")");
+
   // --- settings tuner ---
   await clickByText(page, "button", "終了");
-  await page.waitForSelector(".deck-card", { timeout: 15000 });
+  await page.waitForSelector(".book", { timeout: 15000 });
   await clickByText(page, "button", "設定");
   await waitText(page, "デッキ設定", 15000);
   await page.waitForSelector(".tuner-preview .page-canvas", { timeout: 30000 });
@@ -156,7 +184,7 @@ try {
 
   // --- backup export ---
   await clickByText(page, "button", "戻る");
-  await page.waitForSelector(".deck-card", { timeout: 15000 });
+  await page.waitForSelector(".book", { timeout: 15000 });
   const client = await page.createCDPSession();
   await client.send("Browser.setDownloadBehavior", { behavior: "allow", downloadPath: process.cwd() });
   await clickByText(page, "button", "バックアップを書き出す");

@@ -1,7 +1,15 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { answerCount, deleteDeck, listDecks } from "../db/repo";
-import { exportBackup, downloadBlob, importBackup } from "../db/backup";
+import {
+  answerCount,
+  deleteDeck,
+  getCover,
+  getDeckPdf,
+  listDecks,
+  setCover,
+} from "../db/repo";
+import { renderCover } from "../pdf/pdfEngine";
+import { downloadBlob, exportBackup, importBackup } from "../db/backup";
 import { useApp } from "../store/session";
 import type { DeckRow } from "../types";
 
@@ -9,6 +17,39 @@ function dateStamp(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+}
+
+/** Cover thumbnail for a deck: cached in IndexedDB, generated lazily from page 1. */
+function useCover(deckId: number): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    (async () => {
+      try {
+        let cover = await getCover(deckId);
+        if (!cover) {
+          const pdf = await getDeckPdf(deckId);
+          if (pdf) {
+            const blob = await renderCover(pdf.blob);
+            await setCover(deckId, blob);
+            cover = { deckId, blob };
+          }
+        }
+        if (cover && !cancelled) {
+          objectUrl = URL.createObjectURL(cover.blob);
+          setUrl(objectUrl);
+        }
+      } catch {
+        /* leave placeholder */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [deckId]);
+  return url;
 }
 
 export function DeckList() {
@@ -37,7 +78,7 @@ export function DeckList() {
   return (
     <div className="panel">
       <div className="panel-head">
-        <h2>デッキ</h2>
+        <h2>本棚</h2>
         <button className="btn primary" onClick={() => setView({ name: "import" })}>
           ＋ PDFを取り込む
         </button>
@@ -56,45 +97,51 @@ export function DeckList() {
       {decks === undefined && <p className="muted">読み込み中…</p>}
       {decks && decks.length === 0 && (
         <div className="empty">
-          <p>まだデッキがありません。</p>
-          <p className="muted">赤シート対応のPDFを取り込んで始めましょう。</p>
+          <p>本棚は空です。</p>
+          <p className="muted">赤シート対応のPDFを取り込んで並べましょう。</p>
         </div>
       )}
 
-      <ul className="deck-list">
-        {decks?.map((d) => (
-          <DeckCard key={d.id} deck={d} />
-        ))}
-      </ul>
+      {decks && decks.length > 0 && (
+        <div className="bookshelf">
+          <div className="book-grid">
+            {decks.map((d) => (
+              <DeckBook key={d.id} deck={d} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function DeckCard({ deck }: { deck: DeckRow }) {
+function DeckBook({ deck }: { deck: DeckRow }) {
   const setView = useApp((s) => s.setView);
+  const cover = useCover(deck.id!);
   const count = useLiveQuery(() => answerCount(deck.id!), [deck.id]);
 
   const onDelete = async () => {
-    if (confirm(`「${deck.name}」を削除しますか？`)) {
-      await deleteDeck(deck.id!);
-    }
+    if (confirm(`「${deck.name}」を削除しますか？`)) await deleteDeck(deck.id!);
   };
 
   return (
-    <li className="deck-card">
-      <div className="deck-main" onClick={() => setView({ name: "viewer", deckId: deck.id! })}>
-        <div className="deck-name">{deck.name}</div>
-        <div className="deck-counts">
-          <span className="chip total">{count ?? "…"} 個の暗記</span>
-        </div>
+    <div className="book">
+      <button
+        className="book-cover"
+        title={deck.name}
+        onClick={() => setView({ name: "viewer", deckId: deck.id! })}
+      >
+        {cover ? (
+          <img src={cover} alt={deck.name} loading="lazy" />
+        ) : (
+          <span className="cover-fallback">{deck.name}</span>
+        )}
+      </button>
+      <div className="book-title" title={deck.name}>
+        {deck.name}
       </div>
-      <div className="deck-actions">
-        <button
-          className="btn primary sm"
-          onClick={() => setView({ name: "viewer", deckId: deck.id! })}
-        >
-          めくる
-        </button>
+      <div className="book-meta">{count ?? "…"} 個の暗記</div>
+      <div className="book-actions">
         <button
           className="btn ghost sm"
           onClick={() => setView({ name: "settings", deckId: deck.id! })}
@@ -105,6 +152,6 @@ function DeckCard({ deck }: { deck: DeckRow }) {
           削除
         </button>
       </div>
-    </li>
+    </div>
   );
 }

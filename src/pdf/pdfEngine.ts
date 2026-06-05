@@ -97,6 +97,27 @@ export async function runCandidates(
   return out;
 }
 
+/** Render page 1 of a PDF to a small JPEG cover thumbnail. */
+export async function renderCover(data: ArrayBuffer | Blob, maxWidth = 240): Promise<Blob> {
+  const doc = await loadPdf(data);
+  try {
+    const page = await doc.getPage(1);
+    const dpr = window.devicePixelRatio || 1;
+    const vp1 = page.getViewport({ scale: 1 });
+    const canvas = await renderPage(page, (maxWidth / vp1.width) * dpr);
+    page.cleanup();
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.82),
+    );
+    canvas.width = 0;
+    canvas.height = 0;
+    if (!blob) throw new Error("cover render failed");
+    return blob;
+  } finally {
+    await doc.loadingTask.destroy();
+  }
+}
+
 /** Detect colored answers on a single already-open page (used by the live tuner). */
 export async function detectOnPage(
   page: PDFPageProxy,

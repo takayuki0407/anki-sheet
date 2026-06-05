@@ -1,6 +1,14 @@
 import Dexie from "dexie";
 import { db } from "./schema";
-import type { BookmarkRow, CardRow, DeckColorConfig, DeckRow, DetectedCloze, PdfRow } from "../types";
+import type {
+  BookmarkRow,
+  CardRow,
+  CoverRow,
+  DeckColorConfig,
+  DeckRow,
+  DetectedCloze,
+  PdfRow,
+} from "../types";
 
 export interface ImportParams {
   name: string;
@@ -110,13 +118,29 @@ export function cardsOnPage(deckId: number, pageIndex: number): Promise<CardRow[
     .toArray();
 }
 
+/** All answers in a deck (grouped by page in the viewer). */
+export function deckCards(deckId: number): Promise<CardRow[]> {
+  return db.cards.where("deckId").equals(deckId).toArray();
+}
+
 export async function deleteDeck(deckId: number): Promise<void> {
-  await db.transaction("rw", db.decks, db.pdfs, db.cards, db.bookmarks, async () => {
+  await db.transaction("rw", [db.decks, db.pdfs, db.cards, db.bookmarks, db.covers], async () => {
     await db.cards.where("deckId").equals(deckId).delete();
     await db.bookmarks.where("deckId").equals(deckId).delete();
     await db.pdfs.where("deckId").equals(deckId).delete();
+    await db.covers.delete(deckId);
     await db.decks.delete(deckId);
   });
+}
+
+// ---- cover thumbnails (cached page-1 render, regenerable) ----
+
+export function getCover(deckId: number): Promise<CoverRow | undefined> {
+  return db.covers.get(deckId);
+}
+
+export async function setCover(deckId: number, blob: Blob): Promise<void> {
+  await db.covers.put({ deckId, blob });
 }
 
 // ---- bookmarks (the user-built 目次) ----

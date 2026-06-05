@@ -87,6 +87,12 @@ export interface BookmarkRow {
   createdAt: number;
 }
 
+/** Cached cover thumbnail (page 1) per deck — regenerable, not backed up. */
+export interface CoverRow {
+  deckId: number;
+  blob: Blob;
+}
+
 export interface MetaRow {
   key: string;
   value: unknown;
