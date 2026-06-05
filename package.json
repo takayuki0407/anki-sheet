@@ -9,6 +9,8 @@
     "postinstall": "node scripts/copy-pdfjs-assets.mjs",
     "predev": "node scripts/copy-pdfjs-assets.mjs",
     "dev": "vite",
+    "predev:host": "node scripts/copy-pdfjs-assets.mjs",
+    "dev:host": "vite --host",
     "prebuild": "node scripts/copy-pdfjs-assets.mjs",
     "build": "vite build",
     "preview": "vite preview",

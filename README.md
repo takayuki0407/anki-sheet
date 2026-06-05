@@ -33,6 +33,26 @@ npm run typecheck  # 型チェック
 ブラウザで開いたら「＋ PDFを取り込む」から赤シート対応PDFを選ぶだけです。
 PC・スマホ両方のブラウザで動作します。
 
+## Docker で配信
+
+このアプリは**完全クライアントサイドの静的サイト**です。Dockerはビルド済みの`dist/`を
+nginxで配信するだけで、**スマホ側の動作には一切影響しません**（同じ静的ファイルが届きます）。
+
+```bash
+docker compose up -d --build      # ビルドして起動
+# → http://localhost:8080 （PC）
+# → http://<このPCのLAN IP>:8080 （同じWi-Fiのスマホから）
+docker compose down               # 停止
+```
+
+`docker build -t anki-sheet . && docker run -p 8080:80 anki-sheet` でも同じです。
+
+> **モバイルでPWA（ホーム画面追加・オフライン）を使うにはHTTPSが必須**です。
+> Service WorkerはHTTP(`http://LAN-IP`)では無効になります（アプリ自体は動きます）。
+> HTTPSにするには、本コンテナをCaddy等のHTTPSリバースプロキシ背後に置く、Cloudflare Tunnel
+> を使う、または静的ホスト（GitHub Pages / Netlify / Cloudflare Pages）へ`dist/`をデプロイ
+> してください。開発中にLANのスマホで確認するだけなら `npm run dev:host`（HTTP）でも可。
+
 ## 仕組み（重要メモ）
 
 - **cMaps必須**: 日本語などのCIDフォントをpdf.jsで描画・抽出するには、`pdfjs-dist/cmaps`

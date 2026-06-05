@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.gitignore
+public/pdfjs
+e2e-*.png
+anki-sheet-backup-*.json
+*.log
+npm-debug.log*
+.vscode
+.DS_Store
