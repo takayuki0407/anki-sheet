@@ -10,12 +10,12 @@ import {
   listBookmarks,
 } from "../db/repo";
 import { loadPdf } from "../pdf/pdfEngine";
-import { PageOverlay, type MaskGroup } from "../render/PageOverlay";
+import { PageOverlay, type FitMode, type MaskGroup } from "../render/PageOverlay";
 import { useApp } from "../store/session";
 import type { PdfRow } from "../types";
 
 type Status = "loading" | "ready" | "error";
-const ZOOMS = [1, 1.25, 1.5, 2, 2.5, 3];
+const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3, 4];
 
 /** Standalone digital red sheet: page through a PDF, hide/show answers, tap to peek. */
 export function PageViewer({ deckId }: { deckId: number }) {
@@ -29,6 +29,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [sheetOn, setSheetOn] = useState(true);
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [zoom, setZoom] = useState(1);
+  const [fitMode, setFitMode] = useState<FitMode>("page");
   const [tocOpen, setTocOpen] = useState(false);
 
   const bookmarks = useLiveQuery(() => listBookmarks(deckId), [deckId]) ?? [];
@@ -172,11 +173,13 @@ export function PageViewer({ deckId }: { deckId: number }) {
           doc={doc}
           pageIndex={pageIndex}
           pageW={pdf.pageW}
+          pageH={pdf.pageH}
           groups={groups}
           revealedIds={revealedIds}
           onToggle={toggle}
+          fitMode={fitMode}
           zoom={zoom}
-          maxWidth={1400}
+          maxWidth={1600}
         />
       )}
 
@@ -194,6 +197,12 @@ export function PageViewer({ deckId }: { deckId: number }) {
             disabled={zoom >= ZOOMS[ZOOMS.length - 1]}
           >
             ＋
+          </button>
+          <button
+            className="btn ghost sm"
+            onClick={() => setFitMode((m) => (m === "page" ? "width" : "page"))}
+          >
+            {fitMode === "page" ? "幅に合わせる" : "全体表示"}
           </button>
           <span className="muted spacer">{groups.length} 個の暗記</span>
         </div>

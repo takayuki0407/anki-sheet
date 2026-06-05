@@ -53,6 +53,7 @@ try {
   await clickByText(page, "button", "このデッキを作成");
   await page.waitForSelector(".deck-card", { timeout: 30000 });
   await waitText(page, "個の暗記", 30000);
+  await page.screenshot({ path: "e2e-decklist.png" });
   console.log("OK: deck created");
 
   // --- viewer ---
@@ -69,6 +70,7 @@ try {
   }
   if (m === 0) throw new Error("viewer found no masks");
   console.log("OK: viewer masks (sheet ON) =", m);
+  await page.screenshot({ path: "e2e-viewer-fit.png" });
 
   await clickByText(page, "button", "赤シート ON");
   await sleep(400);
