@@ -168,7 +168,9 @@ try {
   await clickByText(page, "button", "－");
   await sleep(250);
   const pct = await page.evaluate(() => {
-    const b = [...document.querySelectorAll(".zoom-row button")].find((x) => x.textContent.includes("%"));
+    const b = [...document.querySelectorAll(".viewer-controls button")].find((x) =>
+      x.textContent.includes("%"),
+    );
     return b ? b.textContent.trim() : "";
   });
   if (!(parseInt(pct) < 100)) throw new Error("zoom did not go below 100%: " + pct);

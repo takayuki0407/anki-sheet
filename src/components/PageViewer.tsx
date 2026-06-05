@@ -229,39 +229,37 @@ export function PageViewer({ deckId }: { deckId: number }) {
       )}
 
       <div className="viewer-controls">
-        <div className="zoom-row">
-          <button className="btn sm" onClick={() => stepZoom(-1)} disabled={zoom <= ZOOMS[0]}>
-            －
-          </button>
-          <button className="btn ghost sm" onClick={() => setZoom(1)}>
-            {Math.round(zoom * 100)}%
-          </button>
-          <button
-            className="btn sm"
-            onClick={() => stepZoom(1)}
-            disabled={zoom >= ZOOMS[ZOOMS.length - 1]}
-          >
-            ＋
-          </button>
-          <button
-            className="btn ghost sm"
-            onClick={() => setMode((m) => (m === "paged" ? "scroll" : "paged"))}
-          >
-            {mode === "paged" ? "縦読み" : "横読み"}
-          </button>
-          <button
-            className="btn ghost sm"
-            onClick={() => setFitMode((m) => (m === "page" ? "width" : "page"))}
-          >
-            {fitMode === "page" ? "幅に合わせる" : "全体表示"}
-          </button>
-          <button className="btn ghost sm" onClick={toggleFullscreen}>
-            {isFullscreen ? "⤢ 解除" : "⛶ 全画面"}
-          </button>
-        </div>
+        <button className="btn sm" onClick={() => stepZoom(-1)} disabled={zoom <= ZOOMS[0]}>
+          －
+        </button>
+        <button className="btn ghost sm" onClick={() => setZoom(1)}>
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          className="btn sm"
+          onClick={() => stepZoom(1)}
+          disabled={zoom >= ZOOMS[ZOOMS.length - 1]}
+        >
+          ＋
+        </button>
+        <button
+          className="btn ghost sm"
+          onClick={() => setMode((m) => (m === "paged" ? "scroll" : "paged"))}
+        >
+          {mode === "paged" ? "縦読み" : "横読み"}
+        </button>
+        <button
+          className="btn ghost sm"
+          onClick={() => setFitMode((m) => (m === "page" ? "width" : "page"))}
+        >
+          {fitMode === "page" ? "幅に合わせる" : "全体表示"}
+        </button>
+        <button className="btn ghost sm" onClick={toggleFullscreen}>
+          {isFullscreen ? "⤢ 解除" : "⛶ 全画面"}
+        </button>
         {mode === "paged" && (
-          <div className="nav-row">
-            <button className="btn" disabled={pageIndex <= 0} onClick={() => goTo(pageIndex - 1)}>
+          <>
+            <button className="btn sm" disabled={pageIndex <= 0} onClick={() => goTo(pageIndex - 1)}>
               ← 前
             </button>
             <input
@@ -281,13 +279,13 @@ export function PageViewer({ deckId }: { deckId: number }) {
               onChange={(e) => goTo(Number(e.target.value) - 1)}
             />
             <button
-              className="btn"
+              className="btn sm"
               disabled={pageIndex >= pageCount - 1}
               onClick={() => goTo(pageIndex + 1)}
             >
               次 →
             </button>
-          </div>
+          </>
         )}
       </div>
 

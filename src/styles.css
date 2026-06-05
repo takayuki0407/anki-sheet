@@ -326,7 +326,7 @@ body {
 }
 .page-scroll {
   overflow: auto;
-  height: calc(100dvh - 250px);
+  height: calc(100dvh - 196px);
   min-height: 220px;
   -webkit-overflow-scrolling: touch;
   background: var(--bg);
@@ -345,7 +345,7 @@ body {
   box-sizing: border-box;
 }
 .viewer:fullscreen .page-scroll {
-  height: calc(100dvh - 160px);
+  height: calc(100dvh - 116px);
 }
 
 /* Continuous (vertical scroll) reading mode */
@@ -353,7 +353,7 @@ body {
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
-  height: calc(100dvh - 250px);
+  height: calc(100dvh - 196px);
   min-height: 220px;
   -webkit-overflow-scrolling: touch;
   background: var(--bg);
@@ -361,7 +361,7 @@ body {
   padding: 8px 0;
 }
 .viewer:fullscreen .continuous-scroll {
-  height: calc(100dvh - 160px);
+  height: calc(100dvh - 116px);
 }
 .page-slot {
   position: relative;
@@ -474,35 +474,24 @@ body {
   padding: 8px 0;
   background: linear-gradient(transparent, var(--bg) 40%);
 }
+/* All viewer controls share one wrapping row (more room for the page). */
 .viewer-controls {
   position: sticky;
   bottom: 0;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
   padding: 8px 0 4px;
   background: linear-gradient(transparent, var(--bg) 30%);
 }
-.zoom-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.zoom-row .spacer {
-  margin-left: auto;
-  font-size: 12px;
-}
-.nav-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 .page-slider {
   flex: 1;
+  min-width: 110px;
   accent-color: var(--ocean);
 }
 .page-input {
-  width: 64px;
+  width: 60px;
   font: inherit;
   padding: 6px 8px;
   border: 1px solid var(--line);
