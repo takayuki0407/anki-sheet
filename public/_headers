@@ -1,0 +1,11 @@
+# Caching headers, honored by both Cloudflare Pages and Netlify (copied into dist/).
+/index.html
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+/registerSW.js
+  Cache-Control: no-cache
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/pdfjs/*
+  Cache-Control: public, max-age=2592000

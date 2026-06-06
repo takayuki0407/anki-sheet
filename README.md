@@ -41,15 +41,22 @@ PC・スマホ両方のブラウザで動作します。
 
 ## iPhone / Android にインストール（PWA）
 
-GitHub Pages（HTTPS）へ自動デプロイされます: **https://takayuki0407.github.io/anki-sheet/**
-（`main` への push で `.github/workflows/deploy.yml` がビルド＆公開。初回のみ
-リポジトリの Settings → Pages → Source を「GitHub Actions」にしてください。）
+PWAなので、HTTPSで配信すればホーム画面に追加してアプリのように使えます。非公開リポジトリ
+でも無料でHTTPS配信できる **Cloudflare Pages** か **Netlify** に接続してください（設定同梱）。
 
-- **iPhone**: Safari で上記URLを開く → 共有 → **「ホーム画面に追加」** → アイコンから
-  全画面・オフラインで起動します。
-- **Android**: Chrome で開く → メニュー → **「アプリをインストール」**。
-- 端末内（IndexedDB）にPDF・暗記データを保存します。iOSは長期間未使用だとデータを
-  消すことがあるため、**「バックアップを書き出す」で定期保存**してください。
+**Cloudflare Pages**: dash.cloudflare.com → Workers & Pages → Create → Pages →
+「Connect to Git」→ GitHubを認可 → `anki-sheet` を選択 → Build command `npm run build`,
+Output directory `dist` → Deploy。`https://anki-sheet.pages.dev` で公開されます。
+
+**Netlify**: app.netlify.com → Add new site → Import an existing project → GitHub →
+`anki-sheet` を選択（`netlify.toml` を自動認識）→ Deploy。
+
+公開後:
+- **iPhone**: Safari でそのURLを開く → 共有 → **「ホーム画面に追加」** → アイコンから
+  全画面・オフラインで起動。
+- **Android**: Chrome → メニュー → **「アプリをインストール」**。
+- データは端末内（IndexedDB）に保存。iOSは長期間未使用だと消すことがあるため、
+  **「バックアップを書き出す」で定期保存**してください。
 
 ## Docker で配信
 
