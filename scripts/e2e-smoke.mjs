@@ -57,10 +57,20 @@ try {
   await page.screenshot({ path: "e2e-bookshelf.png" });
   console.log("OK: bookshelf + cover thumbnail");
 
-  // --- viewer ---
+  // --- viewer (opens in 縦読み by default) ---
   await page.click(".book-cover");
-  await page.waitForSelector(".page-canvas", { timeout: 30000 });
-  await page.waitForFunction(() => document.querySelector(".page-canvas")?.width > 0, { timeout: 30000 });
+  await page.waitForSelector(".continuous-scroll", { timeout: 30000 });
+  console.log("OK: opens in 縦読み (default)");
+  // switch to 横読み for the paged tests
+  await clickByText(page, "button", "横読み");
+  await page.waitForSelector(".page-stage .page-canvas", { timeout: 30000 });
+  await page.waitForFunction(
+    () => {
+      const c = document.querySelector(".page-stage .page-canvas");
+      return c && c.width > 0;
+    },
+    { timeout: 30000 },
+  );
 
   // find a page with answers
   let m = await masks();
@@ -191,16 +201,17 @@ try {
   if (!(parseInt(pct) < 100)) throw new Error("zoom did not go below 100%: " + pct);
   console.log("OK: sub-100% zoom (" + pct + ")");
 
-  // last-page restore: exit and reopen returns to the same page
+  // last-page + last-mode restore: we're in 横読み here, so reopening should return
+  // to 横読み at the same page (not the 縦読み default)
   const lpBefore = await pageNum();
   await clickByText(page, "button", "終了");
   await page.waitForSelector(".book", { timeout: 15000 });
   await page.click(".book-cover");
-  await page.waitForSelector(".page-status", { timeout: 30000 });
+  await page.waitForSelector(".page-stage", { timeout: 30000 }); // 横読み restored, not 縦読み
   await sleep(800);
   const lpAfter = await pageNum();
   if (lpAfter !== lpBefore) throw new Error(`last-page restore failed (${lpBefore} -> ${lpAfter})`);
-  console.log(`OK: reopened at last page (${lpAfter})`);
+  console.log(`OK: reopened at last page (${lpAfter}) in restored 横読み mode`);
 
   // --- settings tuner ---
   await clickByText(page, "button", "終了");

@@ -54,6 +54,8 @@ export interface DeckRow {
   color: DeckColorConfig;
   /** Last-read page (0-based) so the book reopens where you left off. */
   lastPage?: number;
+  /** Last reading mode ("scroll" = 縦読み / "paged" = 横読み). Default 縦読み. */
+  lastMode?: "scroll" | "paged";
 }
 
 export interface PdfRow {

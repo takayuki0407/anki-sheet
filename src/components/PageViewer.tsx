@@ -34,7 +34,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [zoom, setZoom] = useState(1);
   const [fitMode, setFitMode] = useState<FitMode>("page");
-  const [mode, setMode] = useState<Mode>("paged");
+  const [mode, setMode] = useState<Mode>("scroll"); // 縦読み by default
   const [jumpNonce, setJumpNonce] = useState(0);
   const [tocOpen, setTocOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -87,8 +87,9 @@ export function PageViewer({ deckId }: { deckId: number }) {
         docRef.current = doc;
         setPdf(p);
         setDeckName(d.name);
-        // reopen where we left off
+        // reopen where we left off, in the reading mode used last time
         setPageIndex(Math.max(0, Math.min(p.pageCount - 1, d.lastPage ?? 0)));
+        setMode(d.lastMode ?? "scroll");
         setSheetOn(true);
         setRevealed(new Set());
         setDocReady(true);
@@ -116,14 +117,14 @@ export function PageViewer({ deckId }: { deckId: number }) {
     setJumpNonce((n) => n + 1); // tells ContinuousView to scroll there
   };
 
-  // Remember the reading position (debounced while reading + on exit).
+  // Remember the reading position + mode (debounced while reading + on exit).
   useEffect(() => {
     if (status !== "ready") return;
-    const id = setTimeout(() => void updateDeck(deckId, { lastPage: pageIndex }), 700);
+    const id = setTimeout(() => void updateDeck(deckId, { lastPage: pageIndex, lastMode: mode }), 700);
     return () => clearTimeout(id);
-  }, [pageIndex, status, deckId]);
+  }, [pageIndex, mode, status, deckId]);
   const exit = () => {
-    if (status === "ready") void updateDeck(deckId, { lastPage: pageIndex });
+    if (status === "ready") void updateDeck(deckId, { lastPage: pageIndex, lastMode: mode });
     setView({ name: "decks" });
   };
   const stepZoom = (dir: 1 | -1) => {
