@@ -101,12 +101,26 @@ export async function runCandidates(
   return out;
 }
 
+// Render detection at a lower scale on memory-constrained touch devices (iOS Safari
+// jettisons the page otherwise). Answer-term detection is unaffected: a glyph's
+// in-band pixel count stays well above the threshold even at this scale.
+const MOBILE_DETECT_SCALE = 1.5;
+function detectScale(): number {
+  try {
+    if (typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches)
+      return MOBILE_DETECT_SCALE;
+  } catch {
+    /* fall through to desktop scale */
+  }
+  return DETECT_SCALE;
+}
+
 /** Render page 1 of a PDF to a small JPEG cover thumbnail. */
 export async function renderCover(data: ArrayBuffer | Blob, maxWidth = 240): Promise<Blob> {
   const doc = await loadPdf(data);
   try {
     const page = await doc.getPage(1);
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const vp1 = page.getViewport({ scale: 1 });
     const canvas = await renderPage(page, (maxWidth / vp1.width) * dpr);
     page.cleanup();
@@ -143,7 +157,7 @@ export async function detectSinglePage(
 ): Promise<DetectedCloze[]> {
   const page = await doc.getPage(pageIndex + 1);
   try {
-    return await detectOnPage(page, cfg, DETECT_SCALE);
+    return await detectOnPage(page, cfg, detectScale());
   } finally {
     page.cleanup();
   }
@@ -180,6 +194,8 @@ export async function detectClozesInPdf(
   const doc = await loadPdf(data);
   const pageCount = doc.numPages;
   const canvas = makeCanvas(1, 1);
+  const scale = detectScale();
+  const cleanupEvery = scale < DETECT_SCALE ? 8 : 16;
   let clozes: DetectedCloze[] = [];
   let pageW = 0;
   let pageH = 0;
@@ -193,7 +209,7 @@ export async function detectClozesInPdf(
           pageW = sz.width;
           pageH = sz.height;
         }
-        clozes.push(...(await detectOnPage(page, cfg, DETECT_SCALE, canvas)));
+        clozes.push(...(await detectOnPage(page, cfg, scale, canvas)));
       } finally {
         page.cleanup();
       }
@@ -201,7 +217,7 @@ export async function detectClozesInPdf(
       await yieldToUI();
       // Periodically flush pdf.js caches to keep memory bounded (matters on iOS,
       // which kills the page if a long render run uses too much memory).
-      if (p % 16 === 0) await doc.cleanup();
+      if (p % cleanupEvery === 0) await doc.cleanup();
     }
     clozes = filterByHeight(clozes, cfg.maxHeightRatio);
   } finally {
