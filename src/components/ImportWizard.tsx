@@ -9,12 +9,28 @@ type Phase =
   | { k: "detecting"; page: number; total: number; found: number }
   | { k: "ready"; result: PdfDetectionResult; blob: Blob }
   | { k: "saving" }
-  | { k: "error"; message: string };
+  | { k: "error"; message: string; detail: string };
+
+// Capture everything useful about a failure (name, message, full stack, build id,
+// environment) so it can be read/copied off a device that has no dev tools.
+function describeError(e: unknown): { message: string; detail: string } {
+  const err = e instanceof Error ? e : new Error(String(e));
+  const detail = [
+    `${err.name}: ${err.message}`,
+    `build: ${__BUILD_ID__}`,
+    `ua: ${navigator.userAgent}`,
+    `dpr: ${window.devicePixelRatio} coarse: ${matchMedia("(pointer: coarse)").matches}`,
+    "",
+    err.stack || "(no stack)",
+  ].join("\n");
+  return { message: err.message, detail };
+}
 
 export function ImportWizard() {
   const setView = useApp((s) => s.setView);
   const [phase, setPhase] = useState<Phase>({ k: "idle" });
   const [name, setName] = useState("");
+  const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -34,7 +50,7 @@ export function ImportWizard() {
       setPhase({ k: "ready", result, blob });
     } catch (e) {
       if (e instanceof CancelledError) setPhase({ k: "idle" });
-      else setPhase({ k: "error", message: e instanceof Error ? e.message : String(e) });
+      else setPhase({ k: "error", ...describeError(e) });
     } finally {
       abortRef.current = null;
     }
@@ -69,7 +85,7 @@ export function ImportWizard() {
       // a second time (keeps peak memory lower — important on iOS).
       setView({ name: "decks" });
     } catch (e) {
-      setPhase({ k: "error", message: e instanceof Error ? e.message : String(e) });
+      setPhase({ k: "error", ...describeError(e) });
     }
   };
 
@@ -147,11 +163,28 @@ export function ImportWizard() {
       {phase.k === "error" && (
         <div className="error-box">
           <p>エラー: {phase.message}</p>
-          <button className="btn" onClick={() => setPhase({ k: "idle" })}>
-            戻る
-          </button>
+          <pre className="error-detail" aria-label="エラー詳細">
+            {phase.detail}
+          </pre>
+          <div className="row">
+            <button
+              className="btn"
+              onClick={() => {
+                void navigator.clipboard?.writeText(phase.detail).then(
+                  () => setCopied(true),
+                  () => setCopied(false),
+                );
+              }}
+            >
+              {copied ? "コピーしました" : "詳細をコピー"}
+            </button>
+            <button className="btn" onClick={() => setPhase({ k: "idle" })}>
+              戻る
+            </button>
+          </div>
         </div>
       )}
+      <p className="build-tag">build {__BUILD_ID__}</p>
     </div>
   );
 }

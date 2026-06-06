@@ -3,9 +3,19 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Short build id (YYMMDD-HHMM) stamped into the bundle so the UI can report which
+// deploy is actually running on a device — invaluable for diagnosing stale SW caches.
+const d = new Date();
+const p = (n: number) => String(n).padStart(2, "0");
+const BUILD_ID = `${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+
 // Base is relative so the built app can be opened from any subpath / static host.
 export default defineConfig({
   base: "./",
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
+  // Emit sourcemaps so a minified production stack trace (e.g. from an iPhone) can be
+  // mapped back to source locally with the dist/*.map files.
+  build: { sourcemap: true },
   plugins: [
     react(),
     VitePWA({

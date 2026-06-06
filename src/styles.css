@@ -265,6 +265,27 @@ body {
   border-radius: 14px;
   padding: 20px;
 }
+.error-detail {
+  margin: 12px 0;
+  max-height: 40vh;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.build-tag {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
 .bar {
   height: 10px;
   background: #eee;

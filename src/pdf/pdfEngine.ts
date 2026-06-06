@@ -191,39 +191,51 @@ export async function detectClozesInPdf(
   onProgress?: (page: number, total: number, found: number) => void,
   signal?: AbortSignal,
 ): Promise<PdfDetectionResult> {
-  const doc = await loadPdf(data);
-  const pageCount = doc.numPages;
-  const canvas = makeCanvas(1, 1);
-  const scale = detectScale();
-  const cleanupEvery = scale < DETECT_SCALE ? 8 : 16;
-  let clozes: DetectedCloze[] = [];
-  let pageW = 0;
-  let pageH = 0;
+  // Breadcrumb so a failure on a device reports which step/page broke (the message is
+  // surfaced in the import error UI; the full stack is mapped via sourcemaps).
+  let stage = "loadPdf";
   try {
-    for (let p = 1; p <= pageCount; p++) {
-      if (signal?.aborted) throw new CancelledError();
-      const page = await doc.getPage(p);
-      try {
-        if (p === 1) {
-          const sz = pageSize(page);
-          pageW = sz.width;
-          pageH = sz.height;
+    const doc = await loadPdf(data);
+    const pageCount = doc.numPages;
+    const canvas = makeCanvas(1, 1);
+    const scale = detectScale();
+    const cleanupEvery = scale < DETECT_SCALE ? 8 : 16;
+    let clozes: DetectedCloze[] = [];
+    let pageW = 0;
+    let pageH = 0;
+    try {
+      for (let p = 1; p <= pageCount; p++) {
+        if (signal?.aborted) throw new CancelledError();
+        stage = `getPage ${p}`;
+        const page = await doc.getPage(p);
+        try {
+          if (p === 1) {
+            const sz = pageSize(page);
+            pageW = sz.width;
+            pageH = sz.height;
+          }
+          stage = `detect ${p}`;
+          clozes.push(...(await detectOnPage(page, cfg, scale, canvas)));
+        } finally {
+          page.cleanup();
         }
-        clozes.push(...(await detectOnPage(page, cfg, scale, canvas)));
-      } finally {
-        page.cleanup();
+        onProgress?.(p, pageCount, clozes.length);
+        await yieldToUI();
+        // Periodically flush pdf.js caches to keep memory bounded (matters on iOS,
+        // which kills the page if a long render run uses too much memory).
+        if (p % cleanupEvery === 0) await doc.cleanup();
       }
-      onProgress?.(p, pageCount, clozes.length);
-      await yieldToUI();
-      // Periodically flush pdf.js caches to keep memory bounded (matters on iOS,
-      // which kills the page if a long render run uses too much memory).
-      if (p % cleanupEvery === 0) await doc.cleanup();
+      stage = "filterByHeight";
+      clozes = filterByHeight(clozes, cfg.maxHeightRatio);
+    } finally {
+      canvas.width = 0;
+      canvas.height = 0;
+      await doc.loadingTask.destroy();
     }
-    clozes = filterByHeight(clozes, cfg.maxHeightRatio);
-  } finally {
-    canvas.width = 0;
-    canvas.height = 0;
-    await doc.loadingTask.destroy();
+    return { pageCount, pageW, pageH, clozes };
+  } catch (e) {
+    if (e instanceof CancelledError) throw e;
+    if (e instanceof Error) e.message = `${e.message} [stage=${stage}, build=${__BUILD_ID__}]`;
+    throw e;
   }
-  return { pageCount, pageW, pageH, clozes };
 }
