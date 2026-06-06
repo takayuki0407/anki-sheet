@@ -39,6 +39,18 @@ npm run typecheck  # 型チェック
 ブラウザで開いたら「＋ PDFを取り込む」から赤シート対応PDFを選ぶだけです。
 PC・スマホ両方のブラウザで動作します。
 
+## iPhone / Android にインストール（PWA）
+
+GitHub Pages（HTTPS）へ自動デプロイされます: **https://takayuki0407.github.io/anki-sheet/**
+（`main` への push で `.github/workflows/deploy.yml` がビルド＆公開。初回のみ
+リポジトリの Settings → Pages → Source を「GitHub Actions」にしてください。）
+
+- **iPhone**: Safari で上記URLを開く → 共有 → **「ホーム画面に追加」** → アイコンから
+  全画面・オフラインで起動します。
+- **Android**: Chrome で開く → メニュー → **「アプリをインストール」**。
+- 端末内（IndexedDB）にPDF・暗記データを保存します。iOSは長期間未使用だとデータを
+  消すことがあるため、**「バックアップを書き出す」で定期保存**してください。
+
 ## Docker で配信
 
 このアプリは**完全クライアントサイドの静的サイト**です。Dockerはビルド済みの`dist/`を

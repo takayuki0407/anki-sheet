@@ -53,6 +53,9 @@ export function PageViewer({ deckId }: { deckId: number }) {
       /* fullscreen may be blocked; ignore */
     }
   };
+  // iOS Safari has no Fullscreen API (and PWAs are already full-screen).
+  const fullscreenSupported =
+    typeof document !== "undefined" && !!document.documentElement.requestFullscreen;
 
   const bookmarks = useLiveQuery(() => listBookmarks(deckId), [deckId]) ?? [];
   const allCards = useLiveQuery(
@@ -280,9 +283,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
         >
           {fitMode === "page" ? "幅に合わせる" : "全体表示"}
         </button>
-        <button className="btn ghost sm" onClick={toggleFullscreen}>
-          {isFullscreen ? "⤢ 解除" : "⛶ 全画面"}
-        </button>
+        {fullscreenSupported && (
+          <button className="btn ghost sm" onClick={toggleFullscreen}>
+            {isFullscreen ? "⤢ 解除" : "⛶ 全画面"}
+          </button>
+        )}
         {mode === "paged" && (
           <>
             <button className="btn sm" disabled={pageIndex <= 0} onClick={() => goTo(pageIndex - 1)}>

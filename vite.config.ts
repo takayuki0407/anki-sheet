@@ -15,7 +15,7 @@ export default defineConfig({
         name: "Anki-sheet 赤シート暗記",
         short_name: "Anki-sheet",
         lang: "ja",
-        description: "赤シート対応PDFの色付き語句を自動検出してSRSで暗記",
+        description: "赤シート対応PDFの色付き語句を自動検出して暗記",
         start_url: "./",
         scope: "./",
         display: "standalone",
