@@ -373,7 +373,9 @@ body {
 .continuous-scroll {
   position: relative;
   overflow-y: auto;
-  overflow-x: hidden;
+  /* auto (not hidden) so a page zoomed wider than the viewport can be scrolled /
+     dragged horizontally instead of being clipped to its left edge. */
+  overflow-x: auto;
   height: calc(100dvh - 196px);
   min-height: 220px;
   -webkit-overflow-scrolling: touch;
@@ -383,6 +385,16 @@ body {
 }
 .viewer:fullscreen .continuous-scroll {
   height: calc(100dvh - 116px);
+}
+/* Hand-tool affordance: drag with a mouse/pen to pan a zoomed page (see useDragPan). */
+.viewer .page-scroll,
+.continuous-scroll {
+  cursor: grab;
+}
+.grabbing,
+.grabbing * {
+  cursor: grabbing !important;
+  user-select: none;
 }
 .page-slot {
   position: relative;

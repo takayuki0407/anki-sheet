@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
+import { useDragPan, useWheelZoom } from "./viewerGestures";
 import type { Rect } from "../types";
 
 export interface MaskGroup {
@@ -29,6 +30,8 @@ interface Props {
   /** Tap the left third to go back, the right third to go forward (Kindle-style). */
   onTapZone?: (dir: -1 | 1) => void;
   maxWidth?: number;
+  /** Trackpad pinch / ctrl+wheel zoom: receives a multiplicative factor. */
+  onPinchZoom?: (factor: number) => void;
 }
 
 /**
@@ -49,11 +52,19 @@ export function PageOverlay({
   zoom = 1,
   onTapZone,
   maxWidth = 900,
+  onPinchZoom,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const renderToken = useRef(0);
+  // Keep the viewport centred on the same spot when zoom reflows the page.
+  const anchor = useRef({ hx: 0.5, vy: 0.5 });
+  const prevCssW = useRef(0);
+  const ticking = useRef(false);
+
+  useDragPan(scrollRef);
+  useWheelZoom(scrollRef, onPinchZoom);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -105,8 +116,39 @@ export function PageOverlay({
 
   const fitScale = cssW ? cssW / pageW : 0;
 
+  // Re-centre on the same content when zoom (cssW) reflows the page, so zooming in
+  // doesn't dump you at the top-left corner.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !cssW) return;
+    if (prevCssW.current === 0 || Math.abs(prevCssW.current - cssW) < 0.5) {
+      prevCssW.current = cssW;
+      return;
+    }
+    prevCssW.current = cssW;
+    const a = anchor.current;
+    const maxL = el.scrollWidth - el.clientWidth;
+    const maxT = el.scrollHeight - el.clientHeight;
+    if (maxL > 0) el.scrollLeft = Math.min(maxL, Math.max(0, a.hx * el.scrollWidth - el.clientWidth / 2));
+    if (maxT > 0) el.scrollTop = Math.min(maxT, Math.max(0, a.vy * el.scrollHeight - el.clientHeight / 2));
+  }, [cssW]);
+
+  const onScroll = () => {
+    if (ticking.current) return;
+    ticking.current = true;
+    requestAnimationFrame(() => {
+      ticking.current = false;
+      const el = scrollRef.current;
+      if (!el) return;
+      anchor.current = {
+        hx: el.scrollWidth > el.clientWidth ? (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth : 0.5,
+        vy: el.scrollHeight > el.clientHeight ? (el.scrollTop + el.clientHeight / 2) / el.scrollHeight : 0.5,
+      };
+    });
+  };
+
   return (
-    <div className="page-scroll" ref={scrollRef}>
+    <div className="page-scroll" ref={scrollRef} onScroll={onScroll}>
       <div
         className={`page-stage${onTapZone ? " tappable" : ""}`}
         style={{ width: cssW || undefined }}

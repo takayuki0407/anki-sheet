@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
@@ -130,11 +130,22 @@ export function PageViewer({ deckId }: { deckId: number }) {
     if (status === "ready") void updateDeck(deckId, { lastPage: pageIndex, lastMode: mode });
     setView({ name: "decks" });
   };
+  const MIN_ZOOM = ZOOMS[0];
+  const MAX_ZOOM = ZOOMS[ZOOMS.length - 1];
+  // Step to the next preset above/below the current zoom (which may be a continuous
+  // value set by trackpad pinch), so the +/− buttons stay intuitive after a pinch.
   const stepZoom = (dir: 1 | -1) => {
-    const i = ZOOMS.indexOf(zoom);
-    const ni = Math.max(0, Math.min(ZOOMS.length - 1, (i < 0 ? 0 : i) + dir));
-    setZoom(ZOOMS[ni]);
+    setZoom((z) =>
+      dir > 0
+        ? (ZOOMS.find((v) => v > z + 1e-3) ?? MAX_ZOOM)
+        : ([...ZOOMS].reverse().find((v) => v < z - 1e-3) ?? MIN_ZOOM),
+    );
   };
+  // Trackpad pinch / ctrl+wheel: multiply zoom continuously, clamped to the range.
+  const onPinchZoom = useCallback(
+    (factor: number) => setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z * factor))),
+    [MIN_ZOOM, MAX_ZOOM],
+  );
   const toggle = (id: number) =>
     setRevealed((s) => {
       const n = new Set(s);
@@ -236,6 +247,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
           fitMode={fitMode}
           zoom={zoom}
           onTapZone={(dir) => goTo(pageIndex + dir)}
+          onPinchZoom={onPinchZoom}
           maxWidth={1600}
         />
       )}
@@ -254,6 +266,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
           jumpTo={pageIndex}
           jumpNonce={jumpNonce}
           onVisiblePage={setPageIndex}
+          onPinchZoom={onPinchZoom}
         />
       )}
 

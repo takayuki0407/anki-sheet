@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
 import type { FitMode } from "../render/PageOverlay";
+import { useDragPan, useWheelZoom } from "../render/viewerGestures";
 import type { CardRow } from "../types";
 
 const MAX_DEVICE_W = 2800;
@@ -24,6 +25,8 @@ interface Props {
   jumpNonce?: number;
   /** Reports the top visible page as the user scrolls. */
   onVisiblePage?: (page: number) => void;
+  /** Trackpad pinch / ctrl+wheel zoom: receives a multiplicative factor. */
+  onPinchZoom?: (factor: number) => void;
 }
 
 /**
@@ -49,12 +52,20 @@ export function ContinuousView({
   jumpTo,
   jumpNonce,
   onVisiblePage,
+  onPinchZoom,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const appliedNonce = useRef<number | undefined>(undefined);
   const ticking = useRef(false);
   const lastReported = useRef(-1);
+  // Current reading position, kept fresh on scroll so it can be re-pinned after a
+  // reflow (zoom / fit-mode / full-screen) instead of drifting to another page.
+  const anchor = useRef({ page: jumpTo ?? 0, frac: 0, hCenter: 0.5 });
+  const prevCssW = useRef(0);
+
+  useDragPan(scrollRef);
+  useWheelZoom(scrollRef, onPinchZoom);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -92,18 +103,47 @@ export function ContinuousView({
     }
   }, [jumpNonce, cssW, jumpTo]);
 
+  // Pin the current page when the layout reflows (zoom, fit-mode, or entering /
+  // leaving full-screen all change cssW and therefore every slot's height). Without
+  // this the constant pixel scrollTop would land on a different page after resize.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !cssW) return;
+    if (prevCssW.current === 0 || Math.abs(prevCssW.current - cssW) < 0.5) {
+      prevCssW.current = cssW; // first measure: let the jump effect place us
+      return;
+    }
+    prevCssW.current = cssW;
+    const a = anchor.current;
+    const slot = el.querySelector<HTMLElement>(`[data-page="${a.page}"]`);
+    if (slot) el.scrollTop = slot.offsetTop + a.frac * slot.offsetHeight;
+    const maxLeft = el.scrollWidth - el.clientWidth;
+    el.scrollLeft =
+      maxLeft > 0 ? Math.min(maxLeft, Math.max(0, a.hCenter * el.scrollWidth - el.clientWidth / 2)) : 0;
+  }, [cssW]);
+
   const onScroll = () => {
-    if (ticking.current || !onVisiblePage || !cssW) return;
+    if (ticking.current || !cssW) return;
     ticking.current = true;
     requestAnimationFrame(() => {
       ticking.current = false;
       const el = scrollRef.current;
       if (!el) return;
       const pitch = (cssW * pageH) / pageW + 12; // slot height + margin
-      const p = Math.max(0, Math.min(pageCount - 1, Math.round((el.scrollTop - 8) / pitch)));
+      const rel = el.scrollTop - 8;
+      const exact = pitch > 0 ? rel / pitch : 0;
+      anchor.current = {
+        page: Math.max(0, Math.min(pageCount - 1, Math.floor(exact))),
+        frac: exact - Math.floor(exact),
+        hCenter:
+          el.scrollWidth > el.clientWidth
+            ? (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth
+            : 0.5,
+      };
+      const p = Math.max(0, Math.min(pageCount - 1, Math.round(rel / pitch)));
       if (p !== lastReported.current) {
         lastReported.current = p;
-        onVisiblePage(p);
+        onVisiblePage?.(p);
       }
     });
   };
