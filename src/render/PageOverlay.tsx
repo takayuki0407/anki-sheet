@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
-import { useDragPan, useWheelZoom } from "./viewerGestures";
+import { useDragPan, useTouchPan, useWheelZoom } from "./viewerGestures";
 import type { Rect } from "../types";
 
 export interface MaskGroup {
@@ -63,7 +63,8 @@ export function PageOverlay({
   const prevCssW = useRef(0);
   const ticking = useRef(false);
 
-  useDragPan(scrollRef);
+  useDragPan(scrollRef); // mouse/pen hand-tool pan
+  useTouchPan(scrollRef); // touch: angle-based vertical / free 2D pan with momentum
   useWheelZoom(scrollRef, onPinchZoom); // trackpad / ctrl+wheel zoom (desktop)
 
   useLayoutEffect(() => {

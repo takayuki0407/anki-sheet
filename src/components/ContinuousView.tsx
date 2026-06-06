@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
 import type { FitMode } from "../render/PageOverlay";
-import { useDragPan, useWheelZoom } from "../render/viewerGestures";
+import { useDragPan, useTouchPan, useWheelZoom } from "../render/viewerGestures";
 import type { CardRow } from "../types";
 
 const MAX_DEVICE_W = 2800;
@@ -64,7 +64,8 @@ export function ContinuousView({
   const anchor = useRef({ page: jumpTo ?? 0, frac: 0, hCenter: 0.5 });
   const prevCssW = useRef(0);
 
-  useDragPan(scrollRef);
+  useDragPan(scrollRef); // mouse/pen hand-tool pan
+  useTouchPan(scrollRef); // touch: angle-based vertical / free 2D pan with momentum
   useWheelZoom(scrollRef, onPinchZoom); // trackpad / ctrl+wheel zoom (desktop)
 
   useLayoutEffect(() => {

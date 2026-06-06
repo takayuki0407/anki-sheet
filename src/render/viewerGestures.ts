@@ -105,3 +105,123 @@ export function useWheelZoom(
     return () => el.removeEventListener("wheel", onWheel);
   }, [ref, onZoom]);
 }
+
+/**
+ * Custom one-finger touch panning with inertial momentum, choosing the axis from the
+ * INITIAL drag angle (and keeping that choice for the whole gesture + its fling):
+ *  - initial drag steeper than 45° (|dx| < |dy|, mostly vertical) → vertical-only,
+ *    so a careless vertical swipe never drifts sideways.
+ *  - initial drag at 45° or shallower (|dx| >= |dy|, clearly diagonal/horizontal) →
+ *    free 2D panning that follows the finger.
+ * We own the gesture (the element is touch-action: none) so the decision is reliable
+ * on iOS — correcting native momentum scroll there does not work. We therefore also
+ * replace native momentum with our own fling. Mouse/pen use useDragPan instead.
+ */
+export function useTouchPan(ref: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let active = false;
+    let mode: "none" | "vertical" | "free" = "none";
+    let panned = false;
+    let startX = 0;
+    let startY = 0;
+    let lastX = 0;
+    let lastY = 0;
+    let lastT = 0;
+    let vx = 0;
+    let vy = 0;
+    let raf = 0;
+    const THRESHOLD = 6; // px before a press becomes a pan (taps still click)
+    const MAX_V = 3; // px/ms velocity cap for the fling
+
+    const stopMomentum = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+
+    const onStart = (e: TouchEvent) => {
+      stopMomentum();
+      if (e.touches.length !== 1) {
+        active = false; // ignore multi-touch (no pinch zoom)
+        return;
+      }
+      active = true;
+      panned = false;
+      mode = "none";
+      const t = e.touches[0];
+      startX = lastX = t.clientX;
+      startY = lastY = t.clientY;
+      vx = vy = 0;
+      lastT = performance.now();
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!active || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (mode === "none") {
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
+        if (Math.hypot(dx, dy) < THRESHOLD) return;
+        // |dx| >= |dy| → initial drag at/over 45° → follow in 2D; else vertical-only.
+        mode = Math.abs(dx) >= Math.abs(dy) ? "free" : "vertical";
+        panned = true;
+      }
+      const now = performance.now();
+      const dt = Math.max(1, now - lastT);
+      const mdx = t.clientX - lastX;
+      const mdy = t.clientY - lastY;
+      lastX = t.clientX;
+      lastY = t.clientY;
+      lastT = now;
+      vy = 0.8 * (mdy / dt) + 0.2 * vy;
+      vx = mode === "free" ? 0.8 * (mdx / dt) + 0.2 * vx : 0;
+      el.scrollTop -= mdy;
+      if (mode === "free") el.scrollLeft -= mdx;
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (!active || e.touches.length > 0) return;
+      active = false;
+      if (!panned) return;
+      // Swallow the click some browsers synthesize after a drag (don't toggle a mask).
+      const swallow = (ev: Event) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+      };
+      el.addEventListener("click", swallow, { capture: true, once: true });
+      setTimeout(() => el.removeEventListener("click", swallow, true), 0);
+      // No fling if the finger paused before lifting.
+      if (performance.now() - lastT > 80) vx = vy = 0;
+      let mvx = Math.max(-MAX_V, Math.min(MAX_V, vx));
+      let mvy = Math.max(-MAX_V, Math.min(MAX_V, vy));
+      if (Math.hypot(mvx, mvy) < 0.05) return;
+      let prev = performance.now();
+      const step = () => {
+        const t2 = performance.now();
+        const dt = t2 - prev;
+        prev = t2;
+        const decay = Math.pow(0.995, dt); // ms-based friction (≈ a natural glide)
+        mvx *= decay;
+        mvy *= decay;
+        const beforeTop = el.scrollTop;
+        const beforeLeft = el.scrollLeft;
+        el.scrollTop -= mvy * dt;
+        if (mode === "free") el.scrollLeft -= mvx * dt;
+        const moved = el.scrollTop !== beforeTop || el.scrollLeft !== beforeLeft;
+        raf = moved && Math.hypot(mvx, mvy) > 0.02 ? requestAnimationFrame(step) : 0;
+      };
+      raf = requestAnimationFrame(step);
+    };
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: true });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    el.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      stopMomentum();
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [ref]);
+}

@@ -390,13 +390,13 @@ body {
 .viewer .page-scroll,
 .continuous-scroll {
   cursor: grab;
-  /* Vertical-only touch scrolling: the browser never pans horizontally, so a
-     vertical swipe can't drift the page sideways (rock-stable like a dedicated
-     reader), and native momentum is preserved. Pinch / double-tap zoom of the whole
-     page is also disabled — zoom is via the ±10% buttons and the % input. A zoomed
-     page is kept horizontally centred (see the scroll-anchor effects). Mouse drag /
-     wheel are unaffected by touch-action, so desktop panning still works. */
-  touch-action: pan-y;
+  /* We own touch panning (see useTouchPan): the initial drag angle decides whether
+     the gesture is vertical-only (no sideways drift) or free 2D, and we run our own
+     momentum. touch-action: none stops the browser doing any scroll/zoom of its own,
+     which is what makes the axis choice reliable on iOS. Pinch / double-tap zoom of
+     the page are disabled — zoom is via the ±10% buttons and the % input. Mouse drag
+     / wheel are unaffected by touch-action, so desktop panning still works. */
+  touch-action: none;
 }
 .grabbing,
 .grabbing * {
