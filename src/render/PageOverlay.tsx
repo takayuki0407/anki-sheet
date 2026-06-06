@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
-import { useDragPan, useTouchAxisLock, useWheelZoom } from "./viewerGestures";
+import { useDragPan, useWheelZoom } from "./viewerGestures";
 import type { Rect } from "../types";
 
 export interface MaskGroup {
@@ -65,7 +65,6 @@ export function PageOverlay({
 
   useDragPan(scrollRef);
   useWheelZoom(scrollRef, onPinchZoom); // trackpad / ctrl+wheel zoom (desktop)
-  useTouchAxisLock(scrollRef); // bias touch scrolling to one axis (vertical by default)
 
   useLayoutEffect(() => {
     const el = scrollRef.current;

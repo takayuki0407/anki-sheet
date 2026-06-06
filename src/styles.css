@@ -390,10 +390,13 @@ body {
 .viewer .page-scroll,
 .continuous-scroll {
   cursor: grab;
-  /* Keep native one-finger pan (with momentum) but disable the browser's own
-     pinch-zoom / double-tap-zoom of the whole page while reading. Zoom is via the
-     ±10% buttons and the % input instead. */
-  touch-action: pan-x pan-y;
+  /* Vertical-only touch scrolling: the browser never pans horizontally, so a
+     vertical swipe can't drift the page sideways (rock-stable like a dedicated
+     reader), and native momentum is preserved. Pinch / double-tap zoom of the whole
+     page is also disabled — zoom is via the ±10% buttons and the % input. A zoomed
+     page is kept horizontally centred (see the scroll-anchor effects). Mouse drag /
+     wheel are unaffected by touch-action, so desktop panning still works. */
+  touch-action: pan-y;
 }
 .grabbing,
 .grabbing * {
