@@ -33,7 +33,12 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [sheetOn, setSheetOn] = useState(true);
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [zoom, setZoom] = useState(1);
-  const [fitMode, setFitMode] = useState<FitMode>("page");
+  // Touch devices (iPhone/iPad) default to fit-to-width so the page fills the
+  // screen horizontally and you scroll down — like the Kindle app. Desktop keeps
+  // whole-page view. (The 幅に合わせる / 全体表示 button still toggles either way.)
+  const [fitMode, setFitMode] = useState<FitMode>(() =>
+    typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches ? "width" : "page",
+  );
   const [mode, setMode] = useState<Mode>("scroll"); // 縦読み by default
   const [jumpNonce, setJumpNonce] = useState(0);
   const [tocOpen, setTocOpen] = useState(false);

@@ -396,6 +396,16 @@ body {
   cursor: grabbing !important;
   user-select: none;
 }
+/* Mobile (touch): show the page edge-to-edge like the Kindle app — bleed the page
+   area past the 16px content padding and square off the corners. The control bars
+   keep their normal inset. */
+@media (pointer: coarse) {
+  .viewer .continuous-scroll,
+  .viewer .page-scroll {
+    margin-inline: -16px;
+    border-radius: 0;
+  }
+}
 .page-slot {
   position: relative;
   margin: 0 auto 12px;
