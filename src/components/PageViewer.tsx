@@ -18,7 +18,12 @@ import type { CardRow, PdfRow } from "../types";
 
 type Status = "loading" | "ready" | "error";
 type Mode = "paged" | "scroll";
-const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3, 4];
+// Zoom is a continuous multiplier on the fit base, stepped in 10% increments and
+// typeable as a percentage.
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 4;
+const ZOOM_STEP = 0.1;
+const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(z * 100) / 100));
 
 /** Standalone digital red sheet: page through (or scroll) a PDF, hide/show answers. */
 export function PageViewer({ deckId }: { deckId: number }) {
@@ -33,6 +38,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [sheetOn, setSheetOn] = useState(true);
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [zoom, setZoom] = useState(1);
+  const [zoomEdit, setZoomEdit] = useState<string | null>(null); // raw text while typing %
   // Touch devices (iPhone/iPad) default to fit-to-width so the page fills the
   // screen horizontally and you scroll down — like the Kindle app. Desktop keeps
   // whole-page view. (The 幅に合わせる / 全体表示 button still toggles either way.)
@@ -135,22 +141,18 @@ export function PageViewer({ deckId }: { deckId: number }) {
     if (status === "ready") void updateDeck(deckId, { lastPage: pageIndex, lastMode: mode });
     setView({ name: "decks" });
   };
-  const MIN_ZOOM = ZOOMS[0];
-  const MAX_ZOOM = ZOOMS[ZOOMS.length - 1];
-  // Step to the next preset above/below the current zoom (which may be a continuous
-  // value set by trackpad pinch), so the +/− buttons stay intuitive after a pinch.
-  const stepZoom = (dir: 1 | -1) => {
-    setZoom((z) =>
-      dir > 0
-        ? (ZOOMS.find((v) => v > z + 1e-3) ?? MAX_ZOOM)
-        : ([...ZOOMS].reverse().find((v) => v < z - 1e-3) ?? MIN_ZOOM),
-    );
+  // +/− step by 10% (snapped to the 10% grid so it stays clean after a wheel zoom).
+  const stepZoom = (dir: 1 | -1) =>
+    setZoom((z) => clampZoom(Math.round(z * 10) / 10 + dir * ZOOM_STEP));
+  // Trackpad / ctrl+wheel zoom: multiply continuously, clamped.
+  const onPinchZoom = useCallback((factor: number) => setZoom((z) => clampZoom(z * factor)), []);
+  // Manual percentage entry: hold the raw text while editing, apply on Enter/blur.
+  const applyZoomInput = () => {
+    if (zoomEdit == null) return;
+    const v = parseFloat(zoomEdit);
+    if (!Number.isNaN(v)) setZoom(clampZoom(v / 100));
+    setZoomEdit(null);
   };
-  // Trackpad pinch / ctrl+wheel: multiply zoom continuously, clamped to the range.
-  const onPinchZoom = useCallback(
-    (factor: number) => setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z * factor))),
-    [MIN_ZOOM, MAX_ZOOM],
-  );
   const toggle = (id: number) =>
     setRevealed((s) => {
       const n = new Set(s);
@@ -276,17 +278,32 @@ export function PageViewer({ deckId }: { deckId: number }) {
       )}
 
       <div className="viewer-controls">
-        <button className="btn sm" onClick={() => stepZoom(-1)} disabled={zoom <= ZOOMS[0]}>
+        <button className="btn sm" onClick={() => stepZoom(-1)} disabled={zoom <= MIN_ZOOM + 1e-3}>
           －
         </button>
-        <button className="btn ghost sm" onClick={() => setZoom(1)}>
-          {Math.round(zoom * 100)}%
-        </button>
-        <button
-          className="btn sm"
-          onClick={() => stepZoom(1)}
-          disabled={zoom >= ZOOMS[ZOOMS.length - 1]}
-        >
+        <span className="zoom-field">
+          <input
+            type="number"
+            className="zoom-input"
+            inputMode="numeric"
+            min={Math.round(MIN_ZOOM * 100)}
+            max={Math.round(MAX_ZOOM * 100)}
+            step={Math.round(ZOOM_STEP * 100)}
+            value={zoomEdit ?? Math.round(zoom * 100)}
+            onChange={(e) => setZoomEdit(e.target.value)}
+            onFocus={(e) => e.currentTarget.select()}
+            onBlur={applyZoomInput}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                applyZoomInput();
+                e.currentTarget.blur();
+              }
+            }}
+            aria-label="拡大率（パーセント）"
+          />
+          <span className="zoom-suffix">%</span>
+        </span>
+        <button className="btn sm" onClick={() => stepZoom(1)} disabled={zoom >= MAX_ZOOM - 1e-3}>
           ＋
         </button>
         <button

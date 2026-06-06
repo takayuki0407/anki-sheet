@@ -390,8 +390,9 @@ body {
 .viewer .page-scroll,
 .continuous-scroll {
   cursor: grab;
-  /* Allow native one-finger pan (keeps momentum) but disable the browser's own
-     pinch-zoom / double-tap-zoom — we drive pinch ourselves (see useGesturePinch). */
+  /* Keep native one-finger pan (with momentum) but disable the browser's own
+     pinch-zoom / double-tap-zoom of the whole page while reading. Zoom is via the
+     ±10% buttons and the % input instead. */
   touch-action: pan-x pan-y;
 }
 .grabbing,
@@ -545,6 +546,26 @@ body {
   text-align: center;
   background: var(--card);
   color: var(--ink);
+}
+/* Editable zoom percentage (type a value, ±10% buttons either side). */
+.zoom-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.zoom-input {
+  width: 3.4em;
+  font: inherit;
+  padding: 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: right;
+  background: var(--card);
+  color: var(--ink);
+}
+.zoom-suffix {
+  font-size: 12px;
+  color: var(--muted);
 }
 /* Kindle-style book title (top) + page position / progress percentage (controls). */
 .book-title-bar {

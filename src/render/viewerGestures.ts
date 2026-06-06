@@ -106,117 +106,76 @@ export function useWheelZoom(
   }, [ref, onZoom]);
 }
 
-// iOS Safari fires non-standard gesture events for a two-finger pinch.
-interface IosGestureEvent extends Event {
-  scale: number;
-}
-
 /**
- * Two-finger pinch zoom on touch devices (iPhone/iPad). The page's viewport allows
- * native pinch-zoom, which would scale the whole web page; we capture iOS Safari's
- * gesture events instead, preventDefault to stop that native zoom, and feed a
- * multiplicative factor to onZoom. One-finger scrolling (native, with momentum) is
- * untouched. No-op on engines without gesture events (Android/desktop) — there the
- * trackpad/ctrl+wheel path (useWheelZoom) and native pinch still apply.
- */
-export function useGesturePinch(
-  ref: RefObject<HTMLElement | null>,
-  onZoom?: (factor: number) => void,
-): void {
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || !onZoom) return;
-    let last = 1;
-    const start = (e: Event) => {
-      e.preventDefault();
-      last = 1;
-    };
-    const change = (e: Event) => {
-      e.preventDefault();
-      const scale = (e as IosGestureEvent).scale || 1;
-      if (last > 0 && scale > 0) onZoom(scale / last);
-      last = scale;
-    };
-    const end = (e: Event) => {
-      e.preventDefault();
-      last = 1;
-    };
-    el.addEventListener("gesturestart", start, { passive: false });
-    el.addEventListener("gesturechange", change, { passive: false });
-    el.addEventListener("gestureend", end, { passive: false });
-    return () => {
-      el.removeEventListener("gesturestart", start);
-      el.removeEventListener("gesturechange", change);
-      el.removeEventListener("gestureend", end);
-    };
-  }, [ref, onZoom]);
-}
-
-/**
- * Directional lock for one-finger touch scrolling. Once a gesture commits to an axis
- * (whichever it moved further along first), the other axis is pinned for the rest of
- * the gesture AND through the inertial fling that follows — so when you're scrolling
- * a zoomed page vertically it doesn't drift sideways, yet a deliberate horizontal
- * swipe still pans horizontally. Native momentum is preserved (we only pin the minor
- * axis, never drive the scroll ourselves). Mouse/trackpad scrolling is never locked.
+ * Vertical-biased touch scrolling. Horizontal movement is pinned by DEFAULT for the
+ * whole one-finger gesture (and its inertial fling), so a careless/quick vertical
+ * swipe never drifts the page sideways. Horizontal panning unlocks only on a clear,
+ * deliberate sideways motion of the finger — once the horizontal travel exceeds a
+ * threshold AND clearly dominates the vertical travel — after which vertical is
+ * pinned for a clean horizontal pan. The decision uses the FINGER displacement (from
+ * touch events), not the post-hoc scroll delta, because we continuously pin the
+ * minor axis. Native momentum is preserved; mouse/trackpad scrolling is never locked.
  */
 export function useTouchAxisLock(ref: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    let axis: "v" | "h" | null = null;
-    let pinching = false;
-    let wasPinch = false;
+    let mode: "v" | "h" = "v"; // "v" pins horizontal (default), "h" pins vertical
+    let multi = false; // 2+ fingers down: let the browser handle it
+    let lastInputTouch = false; // never lock mouse/trackpad scrolling
+    let startX = 0;
+    let startY = 0;
     let baseLeft = 0;
     let baseTop = 0;
-    const THRESHOLD = 10; // px before the gesture commits to an axis
+    const H_UNLOCK = 28; // px of horizontal finger travel before horizontal is allowed
+    const H_RATIO = 1.6; // ...and it must clearly dominate vertical travel
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length >= 2) {
-        pinching = true;
-        wasPinch = true;
+        multi = true;
         return;
       }
-      // First finger down: start a fresh gesture (resets any momentum lock).
-      pinching = false;
-      wasPinch = false;
-      axis = null;
+      multi = false;
+      lastInputTouch = true;
+      mode = "v";
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
       baseLeft = el.scrollLeft;
       baseTop = el.scrollTop;
     };
+    const onTouchMove = (e: TouchEvent) => {
+      if (multi || mode === "h" || e.touches.length === 0) return;
+      const t = e.touches[0];
+      const fdx = Math.abs(t.clientX - startX);
+      const fdy = Math.abs(t.clientY - startY);
+      // Only a clearly horizontal drag releases the horizontal lock.
+      if (fdx > H_UNLOCK && fdx > fdy * H_RATIO) mode = "h";
+    };
     const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length > 0) return;
-      pinching = false;
-      // After a pinch, drop the lock so the re-centering scroll isn't fought; after a
-      // one-finger drag, keep it so the inertial fling stays on-axis.
-      if (wasPinch) axis = null;
+      if (e.touches.length === 0) multi = false;
     };
     const onScroll = () => {
-      if (pinching) return;
-      if (axis === null) {
-        const dL = Math.abs(el.scrollLeft - baseLeft);
-        const dT = Math.abs(el.scrollTop - baseTop);
-        if (Math.max(dL, dT) < THRESHOLD) return;
-        axis = dT >= dL ? "v" : "h";
-      }
-      if (axis === "v") {
+      if (multi || !lastInputTouch) return;
+      if (mode === "v") {
         if (el.scrollLeft !== baseLeft) el.scrollLeft = baseLeft;
       } else if (el.scrollTop !== baseTop) {
         el.scrollTop = baseTop;
       }
     };
-    // Mouse/trackpad scrolling must never be axis-locked.
     const onWheel = () => {
-      axis = null;
+      lastInputTouch = false; // mouse/trackpad: do not pin
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
     el.addEventListener("touchcancel", onTouchEnd, { passive: true });
     el.addEventListener("scroll", onScroll, { passive: true });
     el.addEventListener("wheel", onWheel, { passive: true });
     return () => {
       el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchEnd);
       el.removeEventListener("scroll", onScroll);
