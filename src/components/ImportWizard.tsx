@@ -1,11 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import {
-  CancelledError,
-  detectClozesInPdf,
-  renderCover,
-  type PdfDetectionResult,
-} from "../pdf/pdfEngine";
-import { importDeck, setCover } from "../db/repo";
+import { CancelledError, detectClozesInPdf, type PdfDetectionResult } from "../pdf/pdfEngine";
+import { importDeck } from "../db/repo";
 import { useApp } from "../store/session";
 import { DEFAULT_MAGENTA_BAND } from "../types";
 
@@ -61,7 +56,7 @@ export function ImportWizard() {
     const { result, blob } = phase;
     setPhase({ k: "saving" });
     try {
-      const deckId = await importDeck({
+      await importDeck({
         name: name.trim() || "無題のデッキ",
         blob,
         pageCount: result.pageCount,
@@ -70,11 +65,8 @@ export function ImportWizard() {
         color: DEFAULT_MAGENTA_BAND,
         clozes: result.clozes,
       });
-      try {
-        await setCover(deckId, await renderCover(blob));
-      } catch {
-        /* cover is regenerated lazily if this fails */
-      }
+      // Cover is generated lazily in the bookshelf, so import doesn't load the PDF
+      // a second time (keeps peak memory lower — important on iOS).
       setView({ name: "decks" });
     } catch (e) {
       setPhase({ k: "error", message: e instanceof Error ? e.message : String(e) });

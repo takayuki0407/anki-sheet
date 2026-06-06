@@ -199,6 +199,9 @@ export async function detectClozesInPdf(
       }
       onProgress?.(p, pageCount, clozes.length);
       await yieldToUI();
+      // Periodically flush pdf.js caches to keep memory bounded (matters on iOS,
+      // which kills the page if a long render run uses too much memory).
+      if (p % 16 === 0) await doc.cleanup();
     }
     clozes = filterByHeight(clozes, cfg.maxHeightRatio);
   } finally {
