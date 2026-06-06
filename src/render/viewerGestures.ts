@@ -133,7 +133,7 @@ export function useTouchPan(ref: RefObject<HTMLElement | null>): void {
     let vy = 0;
     let raf = 0;
     const THRESHOLD = 6; // px before a press becomes a pan (taps still click)
-    const MAX_V = 3; // px/ms velocity cap for the fling
+    const MAX_V = 5; // px/ms velocity cap for the fling
 
     const stopMomentum = () => {
       if (raf) cancelAnimationFrame(raf);
@@ -199,7 +199,7 @@ export function useTouchPan(ref: RefObject<HTMLElement | null>): void {
         const t2 = performance.now();
         const dt = t2 - prev;
         prev = t2;
-        const decay = Math.pow(0.995, dt); // ms-based friction (≈ a natural glide)
+        const decay = Math.pow(0.997, dt); // ms-based friction (lower = longer glide)
         mvx *= decay;
         mvy *= decay;
         const beforeTop = el.scrollTop;
