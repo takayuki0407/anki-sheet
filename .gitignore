@@ -5,3 +5,10 @@ public/pdfjs
 .DS_Store
 .vite
 fixtures/*.pdf
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
