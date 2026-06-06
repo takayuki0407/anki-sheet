@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
-import { useDragPan, useWheelZoom } from "./viewerGestures";
+import { useDragPan, useGesturePinch, useTouchAxisLock, useWheelZoom } from "./viewerGestures";
 import type { Rect } from "../types";
 
 export interface MaskGroup {
@@ -65,6 +65,8 @@ export function PageOverlay({
 
   useDragPan(scrollRef);
   useWheelZoom(scrollRef, onPinchZoom);
+  useGesturePinch(scrollRef, onPinchZoom); // iOS two-finger pinch
+  useTouchAxisLock(scrollRef); // weaken diagonal: lock vertical/horizontal per gesture
 
   useLayoutEffect(() => {
     const el = scrollRef.current;

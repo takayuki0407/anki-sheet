@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
 import type { FitMode } from "../render/PageOverlay";
-import { useDragPan, useWheelZoom } from "../render/viewerGestures";
+import { useDragPan, useGesturePinch, useTouchAxisLock, useWheelZoom } from "../render/viewerGestures";
 import type { CardRow } from "../types";
 
 const MAX_DEVICE_W = 2800;
@@ -66,6 +66,8 @@ export function ContinuousView({
 
   useDragPan(scrollRef);
   useWheelZoom(scrollRef, onPinchZoom);
+  useGesturePinch(scrollRef, onPinchZoom); // iOS two-finger pinch
+  useTouchAxisLock(scrollRef); // weaken diagonal: lock vertical/horizontal per gesture
 
   useLayoutEffect(() => {
     const el = scrollRef.current;

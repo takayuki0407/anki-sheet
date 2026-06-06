@@ -390,6 +390,9 @@ body {
 .viewer .page-scroll,
 .continuous-scroll {
   cursor: grab;
+  /* Allow native one-finger pan (keeps momentum) but disable the browser's own
+     pinch-zoom / double-tap-zoom — we drive pinch ourselves (see useGesturePinch). */
+  touch-action: pan-x pan-y;
 }
 .grabbing,
 .grabbing * {
