@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { CancelledError, detectClozesInPdf, type PdfDetectionResult } from "../pdf/pdfEngine";
-import { importDeck } from "../db/repo";
+import { importBookmarks, importDeck } from "../db/repo";
 import { useApp } from "../store/session";
 import {
   COLOR_PRESETS,
@@ -93,7 +93,7 @@ export function ImportWizard() {
     const { result, blob } = phase;
     setPhase({ k: "saving" });
     try {
-      await importDeck({
+      const deckId = await importDeck({
         name: name.trim() || "無題のデッキ",
         blob,
         pageCount: result.pageCount,
@@ -102,6 +102,8 @@ export function ImportWizard() {
         color: colorRef.current,
         clozes: result.clozes,
       });
+      // Import the PDF's built-in outline (目次) as bookmarks, if it has one.
+      if (result.outline.length) await importBookmarks(deckId, result.outline);
       // Cover is generated lazily in the bookshelf, so import doesn't load the PDF
       // a second time (keeps peak memory lower — important on iOS).
       setView({ name: "decks" });
@@ -180,6 +182,11 @@ export function ImportWizard() {
             <strong>{phase.result.clozes.length}</strong> 個の語句を検出しました
             （{phase.result.pageCount}ページ）
           </p>
+          {phase.result.outline.length > 0 && (
+            <p className="muted small">
+              PDFの目次 {phase.result.outline.length} 件もしおりに取り込みます
+            </p>
+          )}
           <div className="import-color">
             <span className="import-color-label">検出が合わない時は色を変えて再検出</span>
             <div className="preset-row">

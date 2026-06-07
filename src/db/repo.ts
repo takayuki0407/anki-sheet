@@ -149,6 +149,18 @@ export async function addBookmark(deckId: number, pageIndex: number, title: stri
   await db.bookmarks.add({ deckId, pageIndex, title, createdAt: Date.now() });
 }
 
+/** Bulk-add bookmarks (e.g. imported from a PDF's built-in outline). */
+export async function importBookmarks(
+  deckId: number,
+  items: { title: string; pageIndex: number }[],
+): Promise<void> {
+  if (!items.length) return;
+  const now = Date.now();
+  await db.bookmarks.bulkAdd(
+    items.map((b) => ({ deckId, pageIndex: b.pageIndex, title: b.title, createdAt: now })),
+  );
+}
+
 export function listBookmarks(deckId: number): Promise<BookmarkRow[]> {
   return db.bookmarks
     .where("[deckId+pageIndex]")
