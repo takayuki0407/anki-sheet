@@ -37,7 +37,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [docReady, setDocReady] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [sheetOn, setSheetOn] = useState(true);
-  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState(1);
   const [zoomEdit, setZoomEdit] = useState<string | null>(null); // raw text while typing %
   // Touch devices (iPhone/iPad) default to fit-to-width so the page fills the
@@ -105,8 +105,8 @@ export function PageViewer({ deckId }: { deckId: number }) {
         // reopen where we left off, in the reading mode used last time
         setPageIndex(Math.max(0, Math.min(p.pageCount - 1, d.lastPage ?? 0)));
         setMode(d.lastMode ?? "scroll");
-        setSheetOn(true);
-        setRevealed(new Set());
+        setSheetOn(d.sheetOn ?? true);
+        setRevealed(new Set(d.revealed ?? []));
         setDocReady(true);
         setStatus("ready");
       } catch (e) {
@@ -138,8 +138,23 @@ export function PageViewer({ deckId }: { deckId: number }) {
     const id = setTimeout(() => void updateDeck(deckId, { lastPage: pageIndex, lastMode: mode }), 700);
     return () => clearTimeout(id);
   }, [pageIndex, mode, status, deckId]);
+  // Persist the red-sheet reveal state so reopening the book restores what was shown/hidden.
+  useEffect(() => {
+    if (status !== "ready") return;
+    const id = setTimeout(
+      () => void updateDeck(deckId, { revealed: [...revealed], sheetOn }),
+      500,
+    );
+    return () => clearTimeout(id);
+  }, [revealed, sheetOn, status, deckId]);
   const exit = () => {
-    if (status === "ready") void updateDeck(deckId, { lastPage: pageIndex, lastMode: mode });
+    if (status === "ready")
+      void updateDeck(deckId, {
+        lastPage: pageIndex,
+        lastMode: mode,
+        revealed: [...revealed],
+        sheetOn,
+      });
     setView({ name: "decks" });
   };
   // +/− step by 10% (snapped to the 10% grid so it stays clean after a wheel zoom).
@@ -154,11 +169,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
     if (!Number.isNaN(v)) setZoom(clampZoom(v / 100));
     setZoomEdit(null);
   };
-  const toggle = (id: number) =>
+  const toggle = (key: string) =>
     setRevealed((s) => {
       const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
       return n;
     });
 
@@ -255,7 +270,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
           pageH={pdf.pageH}
           groups={groups}
           revealedIds={revealed}
-          onToggle={(id) => toggle(id as number)}
+          onToggle={toggle}
           fitMode={fitMode}
           zoom={zoom}
           onTapZone={(dir) => goTo(pageIndex + dir)}

@@ -56,6 +56,10 @@ export interface DeckRow {
   lastPage?: number;
   /** Last reading mode ("scroll" = 縦読み / "paged" = 横読み). Default 縦読み. */
   lastMode?: "scroll" | "paged";
+  /** Persisted reveal state: keys "cardId:rectIndex" that were revealed last session. */
+  revealed?: string[];
+  /** Whether the red sheet was ON when the book was last closed (default true). */
+  sheetOn?: boolean;
 }
 
 export interface PdfRow {

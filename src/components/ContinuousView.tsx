@@ -15,8 +15,8 @@ interface Props {
   pageH: number;
   cardsByPage: Map<number, CardRow[]>;
   sheetOn: boolean;
-  revealed: ReadonlySet<number>;
-  onToggle: (id: number) => void;
+  revealed: ReadonlySet<string>;
+  onToggle: (key: string) => void;
   zoom: number;
   /** "page" = each page fits the viewport (one page per screen); "width" = fit width. */
   fitMode: FitMode;
@@ -179,8 +179,8 @@ interface SlotProps {
   pageH: number;
   cards: CardRow[];
   sheetOn: boolean;
-  revealed: ReadonlySet<number>;
-  onToggle: (id: number) => void;
+  revealed: ReadonlySet<string>;
+  onToggle: (key: string) => void;
   rootRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -260,13 +260,15 @@ function PageSlot({
         fitScale > 0 &&
         cards.flatMap((c) => {
           const rects = c.rects.length ? c.rects : [c.answerRect];
-          const isRevealed = revealed.has(c.id!);
+          // Each rect toggles independently (key cardId:rectIndex) — different lines of an
+          // over-merged answer no longer reveal together.
           return rects.map((r, i) => {
             const h = r.h * fitScale;
+            const key = `${c.id}:${i}`;
             return (
               <div
-                key={`${c.id}:${i}`}
-                className={isRevealed ? "reveal-zone" : "mask"}
+                key={key}
+                className={revealed.has(key) ? "reveal-zone" : "mask"}
                 style={
                   {
                     left: r.x * fitScale,
@@ -277,7 +279,7 @@ function PageSlot({
                     "--tap-pad": `${Math.max(4, h * 0.3)}px`,
                   } as CSSProperties
                 }
-                onClick={() => onToggle(c.id!)}
+                onClick={() => onToggle(key)}
               />
             );
           });

@@ -11,7 +11,7 @@ export interface MaskGroup {
 
 export type FitMode = "page" | "width";
 
-const EMPTY: ReadonlySet<string | number> = new Set();
+const EMPTY: ReadonlySet<string> = new Set();
 const MAX_DEVICE_W = 2800; // cap rendered canvas width (memory)
 
 interface Props {
@@ -20,8 +20,9 @@ interface Props {
   pageW: number; // page coordinates (points)
   pageH?: number; // page height (points) — needed for fit-to-page
   groups?: MaskGroup[];
-  revealedIds?: ReadonlySet<string | number>;
-  onToggle?: (id: string | number) => void;
+  /** Revealed per-rect keys ("groupId:rectIndex"). */
+  revealedIds?: ReadonlySet<string>;
+  onToggle?: (key: string) => void;
   highlightRects?: Rect[];
   /** "page" fits the whole page in the viewport; "width" fits the page width. */
   fitMode?: FitMode;
@@ -163,14 +164,16 @@ export function PageOverlay({
       >
         <canvas ref={canvasRef} className="page-canvas" />
         {fitScale > 0 &&
-          groups.map((g) => {
-            const revealed = revealedIds.has(g.id);
-            // Both states stay clickable so a revealed answer can be hidden again.
-            return g.rects.map((r, i) => {
+          // Each rect toggles independently (key groupId:rectIndex) so different masks —
+          // including different lines of an over-merged answer — never reveal together.
+          groups.map((g) =>
+            g.rects.map((r, i) => {
               const h = r.h * fitScale;
+              const key = `${g.id}:${i}`;
+              const revealed = revealedIds.has(key);
               return (
                 <div
-                  key={`${g.id}:${i}`}
+                  key={key}
                   className={revealed ? "reveal-zone" : "mask"}
                   style={
                     {
@@ -184,12 +187,12 @@ export function PageOverlay({
                   }
                   onClick={(e) => {
                     e.stopPropagation();
-                    onToggle?.(g.id);
+                    onToggle?.(key);
                   }}
                 />
               );
-            });
-          })}
+            }),
+          )}
         {fitScale > 0 &&
           highlightRects?.map((r, i) => (
             <div
