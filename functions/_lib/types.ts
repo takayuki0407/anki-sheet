@@ -37,6 +37,7 @@ export interface Env {
   PDFS?: R2Bucket;
   FIREBASE_PROJECT_ID: string;
   ADMIN_EMAIL?: string; // this account is treated as 'admin' (unlimited) regardless of users.tier
+  RC_WEBHOOK_SECRET?: string; // shared secret for the RevenueCat webhook (Pages secret)
 }
 
 /** The subset of the Pages Functions context we use. `data.uid`/`data.email` are set by auth. */
