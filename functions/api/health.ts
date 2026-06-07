@@ -2,4 +2,4 @@
 import { json, type Fn } from "../_lib/types";
 
 export const onRequestGet: Fn = (ctx) =>
-  json({ ok: true, service: "anki-sheet-api", db: !!ctx.env.DB });
+  json({ ok: true, service: "anki-sheet-api", db: !!ctx.env.DB, r2: !!ctx.env.PDFS });
