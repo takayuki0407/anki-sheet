@@ -6,7 +6,8 @@ export type View =
   | { name: "import" }
   | { name: "viewer"; deckId: number }
   | { name: "settings"; deckId: number }
-  | { name: "info" };
+  | { name: "info" }
+  | { name: "login" };
 
 interface AppState {
   view: View;

@@ -945,8 +945,44 @@ body {
 }
 
 /* topbar 情報 link (pushed to the right) */
+.topbar-account {
+  margin-left: auto; /* push the account + 情報 buttons to the right */
+}
 .topbar-info {
-  margin-left: auto;
+  margin-left: 8px;
+}
+
+/* Auth (login) screen */
+.auth-panel {
+  max-width: 420px;
+  margin: 0 auto;
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.linklike {
+  background: none;
+  border: none;
+  color: var(--ocean);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.auth-msg {
+  color: #c0392b;
+  font-size: 13px;
+  margin: 2px 0;
 }
 
 /* Import color picker */

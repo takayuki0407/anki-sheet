@@ -2,6 +2,7 @@
 // Reachable from the topbar "情報" link.
 import { useState } from "react";
 import { useApp } from "../store/session";
+import { signOutUser, useAuth } from "../auth/useAuth";
 
 const SUPPORT_EMAIL = "zabieru.0407@gmail.com";
 
@@ -39,6 +40,7 @@ function Faq({ q, a }: { q: string; a: string }) {
 
 export function Info() {
   const setView = useApp((s) => s.setView);
+  const user = useAuth((s) => s.user);
   return (
     <div className="panel info-page">
       <div className="panel-head">
@@ -58,14 +60,34 @@ export function Info() {
       <section className="info-section">
         <h3 className="section">アカウント</h3>
         <div className="info-card">
-          <p>
-            現在ウェブ版は<strong>アカウント不要</strong>で利用でき、データ（取り込んだPDF・検出結果・
-            しおり）は<strong>このブラウザ内だけ</strong>に保存されます。
-          </p>
-          <p className="muted small">
-            iOSアプリとのアカウント連携・サブスクリプションの同期は準備中です。端末・ブラウザ間でデータを
-            移すには、本棚の「バックアップを書き出す／読み込む」をご利用ください。
-          </p>
+          {user ? (
+            <>
+              <p>
+                ログイン中：<strong>{user.email ?? "（メール未設定）"}</strong>
+              </p>
+              <p className="muted small">
+                同じアカウントで iOSアプリ にもログインできます。Proでは端末・プラットフォーム間で
+                クラウド同期されます。
+              </p>
+              <button className="btn ghost sm" onClick={() => void signOutUser()}>
+                ログアウト
+              </button>
+            </>
+          ) : (
+            <>
+              <p>
+                <strong>アカウント</strong>を作成すると、iOSアプリと同じアカウントで利用でき、
+                Proでは端末・プラットフォーム間でクラウド同期できます。
+              </p>
+              <p className="muted small">
+                ログインしない場合も、データ（取り込んだPDF・検出結果・しおり）は
+                <strong>このブラウザ内だけ</strong>に保存され、引き続き無料で使えます。
+              </p>
+              <button className="btn primary sm" onClick={() => setView({ name: "login" })}>
+                ログイン / アカウント作成
+              </button>
+            </>
+          )}
         </div>
       </section>
 
