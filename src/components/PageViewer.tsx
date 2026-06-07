@@ -68,18 +68,22 @@ function RedSheet({
     drag.current = null;
     (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
   };
-  // The sheet body has pointer-events:none (scroll the page through it); only the top grip drags.
+  // The sheet body has pointer-events:none (scroll the page through it); two slim handles at the
+  // LEFT and RIGHT ends of the top edge resize it (the centre is left clear for reading).
   return (
     <>
       <div className="red-sheet" style={{ top: band.top }} />
-      <div
-        className="red-sheet-grip"
-        style={{ top: band.top - 11 }}
-        onPointerDown={begin}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerCancel={end}
-      />
+      {(["left", "right"] as const).map((side) => (
+        <div
+          key={side}
+          className={`red-sheet-grip ${side}`}
+          style={{ top: band.top - 6 }}
+          onPointerDown={begin}
+          onPointerMove={move}
+          onPointerUp={end}
+          onPointerCancel={end}
+        />
+      ))}
     </>
   );
 }
