@@ -51,12 +51,15 @@ let renderLock: Promise<unknown> = Promise.resolve();
 
 /** Render a page into a 2D canvas at the given scale (serialized app-wide). The
  * optional shouldCancel is checked once the mutex frees, so a render queued for a
- * page that has since scrolled away / unmounted is skipped instead of rasterized. */
+ * page that has since scrolled away / unmounted is skipped instead of rasterized.
+ * Set willRead=true ONLY when the pixels will be read back (detection); for plain
+ * display, leave it false so the canvas is GPU-accelerated (sharper + faster). */
 export async function renderPage(
   page: PDFPageProxy,
   scale: number,
   canvas?: HTMLCanvasElement,
   shouldCancel?: () => boolean,
+  willRead = false,
 ): Promise<HTMLCanvasElement> {
   const run = async () => {
     if (shouldCancel?.()) return canvas ?? makeCanvas(1, 1);
@@ -64,7 +67,7 @@ export async function renderPage(
     const c = canvas ?? makeCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
     c.width = Math.ceil(viewport.width);
     c.height = Math.ceil(viewport.height);
-    const ctx = c.getContext("2d", { willReadFrequently: true })!;
+    const ctx = c.getContext("2d", { willReadFrequently: willRead })!;
     await page.render({ canvasContext: ctx, viewport, canvas: c }).promise;
     return c;
   };
@@ -143,7 +146,7 @@ export async function detectOnPage(
   scale: number,
   canvas?: HTMLCanvasElement,
 ): Promise<DetectedCloze[]> {
-  const c = await renderPage(page, scale, canvas);
+  const c = await renderPage(page, scale, canvas, undefined, true); // willRead: detection reads pixels
   const px = pixelsFrom(c);
   const runs = await runCandidates(page, scale);
   return detectPage(page.pageNumber - 1, px, runs, cfg, scale);
