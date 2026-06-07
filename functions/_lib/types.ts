@@ -36,14 +36,15 @@ export interface Env {
   DB: D1DB;
   PDFS?: R2Bucket;
   FIREBASE_PROJECT_ID: string;
+  ADMIN_EMAIL?: string; // this account is treated as 'admin' (unlimited) regardless of users.tier
 }
 
-/** The subset of the Pages Functions context we use. `data.uid` is set by the auth middleware. */
+/** The subset of the Pages Functions context we use. `data.uid`/`data.email` are set by auth. */
 export interface FnCtx {
   request: Request;
   env: Env;
   params: Record<string, string>;
-  data: { uid?: string };
+  data: { uid?: string; email?: string };
   next: () => Promise<Response>;
 }
 export type Fn = (ctx: FnCtx) => Promise<Response> | Response;

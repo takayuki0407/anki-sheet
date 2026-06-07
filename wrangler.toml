@@ -8,6 +8,8 @@ pages_build_output_dir = "dist"
 # Public (non-secret) config. Firebase project id is used to validate ID tokens (aud/iss).
 [vars]
 FIREBASE_PROJECT_ID = "anki-sheet-b73b0"
+# This account (by verified email) is treated as 'admin' = unlimited, regardless of users.tier.
+ADMIN_EMAIL = "zabieru.0407@gmail.com"
 
 # D1: account-global book registry, progress, tier cache. (binding -> env.DB)
 [[d1_databases]]

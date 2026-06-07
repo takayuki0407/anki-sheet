@@ -3,7 +3,7 @@
 // total. Returns 503 until R2 is enabled + bound (PDFS). egress from R2 is free, so downloads
 // to other devices cost nothing.
 import { json, type Fn } from "../../../../_lib/types";
-import { getTier, MAX_FILE_BYTES, PRO_STORAGE_BYTES } from "../../../../_lib/tier";
+import { getTier, isUnlimited, MAX_FILE_BYTES, PRO_STORAGE_BYTES } from "../../../../_lib/tier";
 
 const r2key = (uid: string, bookId: string) => `${uid}/${bookId}.pdf`;
 
@@ -11,7 +11,8 @@ export const onRequestPut: Fn = async (ctx) => {
   const uid = ctx.data.uid!;
   const bookId = ctx.params.bookId;
   if (!ctx.env.PDFS) return json({ error: "r2_not_configured" }, 503);
-  if ((await getTier(ctx.env, uid)) !== "pro") return json({ error: "pro_required" }, 403);
+  if (!isUnlimited(await getTier(ctx.env, uid, ctx.data.email)))
+    return json({ error: "pro_required" }, 403);
 
   // The slot must already exist (POST /books reserves it + counts it against the cap).
   const reg = await ctx.env.DB.prepare("SELECT book_id FROM books WHERE uid = ? AND book_id = ?")

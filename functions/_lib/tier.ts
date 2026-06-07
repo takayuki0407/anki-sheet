@@ -10,11 +10,21 @@ export const STANDARD_DECK_LIMIT = 10;
 export const PRO_STORAGE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB total (Pro cloud cap)
 export const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per file
 
-export type Tier = "standard" | "pro";
+export type Tier = "standard" | "pro" | "admin";
 
-export async function getTier(env: Env, uid: string): Promise<Tier> {
+/** 'admin' (the developer account, by email) and 'pro' are unlimited; 'standard' is capped. */
+export function isUnlimited(t: Tier): boolean {
+  return t === "pro" || t === "admin";
+}
+export function limitFor(t: Tier): number {
+  return isUnlimited(t) ? Number.MAX_SAFE_INTEGER : STANDARD_DECK_LIMIT;
+}
+
+export async function getTier(env: Env, uid: string, email?: string): Promise<Tier> {
+  if (email && env.ADMIN_EMAIL && email.toLowerCase() === env.ADMIN_EMAIL.toLowerCase())
+    return "admin";
   const row = await env.DB.prepare("SELECT tier FROM users WHERE uid = ?")
     .bind(uid)
     .first<{ tier: string }>();
-  return row?.tier === "pro" ? "pro" : "standard";
+  return row?.tier === "pro" ? "pro" : row?.tier === "admin" ? "admin" : "standard";
 }

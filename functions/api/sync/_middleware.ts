@@ -6,8 +6,9 @@ import { json, type Fn } from "../../_lib/types";
 export const onRequest: Fn = async (ctx) => {
   const header = ctx.request.headers.get("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  const uid = token ? await verifyFirebaseToken(token, ctx.env) : null;
-  if (!uid) return json({ error: "unauthorized" }, 401);
-  ctx.data.uid = uid;
+  const v = token ? await verifyFirebaseToken(token, ctx.env) : null;
+  if (!v) return json({ error: "unauthorized" }, 401);
+  ctx.data.uid = v.uid;
+  ctx.data.email = v.email ?? undefined;
   return ctx.next();
 };

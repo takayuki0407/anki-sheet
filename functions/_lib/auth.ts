@@ -53,13 +53,18 @@ function b64urlToString(s: string): string {
   return new TextDecoder().decode(b64urlToBytes(s));
 }
 
-/** Returns the verified Firebase uid, or null if the token is missing/invalid/expired. */
-export async function verifyFirebaseToken(token: string, env: Env): Promise<string | null> {
+export interface VerifiedToken {
+  uid: string;
+  email: string | null;
+}
+
+/** Returns the verified uid + email, or null if the token is missing/invalid/expired. */
+export async function verifyFirebaseToken(token: string, env: Env): Promise<VerifiedToken | null> {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const [h, p, sig] = parts;
   let header: { kid?: string; alg?: string };
-  let payload: { aud?: string; iss?: string; sub?: string; exp?: number };
+  let payload: { aud?: string; iss?: string; sub?: string; exp?: number; email?: string };
   try {
     header = JSON.parse(b64urlToString(h));
     payload = JSON.parse(b64urlToString(p));
@@ -81,5 +86,5 @@ export async function verifyFirebaseToken(token: string, env: Env): Promise<stri
     b64urlToBytes(sig),
     new TextEncoder().encode(`${h}.${p}`),
   );
-  return ok ? payload.sub : null;
+  return ok ? { uid: payload.sub, email: payload.email ?? null } : null;
 }
