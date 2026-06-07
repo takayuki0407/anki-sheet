@@ -120,26 +120,27 @@ export function DeckList() {
     }
     let live = true;
     void listBooks()
-      .then((u) => live && setCloud(u.books))
+      .then(async (u) => {
+        if (!live) return;
+        setCloud(u.books);
+        // Reconcile favorite / latest-opened set on other devices ONCE per fetch, against a fresh
+        // read of the local decks (not the live query) so a later optimistic toggle isn't clobbered
+        // by a stale snapshot. Server is authoritative for favorite; opened_at takes the most recent.
+        const locals = await listDecks();
+        for (const b of u.books) {
+          const local = locals.find((d) => d.bookId === b.book_id);
+          if (!local?.id) continue;
+          const patch: { favorite?: boolean; openedAt?: number } = {};
+          if (!!local.favorite !== !!b.favorite) patch.favorite = !!b.favorite;
+          if ((b.opened_at ?? 0) > (local.openedAt ?? 0)) patch.openedAt = b.opened_at;
+          if (Object.keys(patch).length) await updateDeck(local.id, patch);
+        }
+      })
       .catch(() => live && setCloud(null));
     return () => {
       live = false;
     };
   }, [user]);
-
-  // Adopt favorite / latest-opened state from the account (set on other devices) for the books we
-  // also have locally. Server is authoritative for favorite; opened_at takes the most recent.
-  useEffect(() => {
-    if (!cloud || !vms) return;
-    for (const b of cloud) {
-      const local = vms.find((v) => v.deck.bookId === b.book_id)?.deck;
-      if (!local?.id) continue;
-      const patch: { favorite?: boolean; openedAt?: number } = {};
-      if (!!local.favorite !== !!b.favorite) patch.favorite = !!b.favorite;
-      if ((b.opened_at ?? 0) > (local.openedAt ?? 0)) patch.openedAt = b.opened_at;
-      if (Object.keys(patch).length) void updateDeck(local.id, patch);
-    }
-  }, [cloud, vms]);
 
   const localIds = new Set(((decks ?? []).map((d) => d.bookId).filter(Boolean) as string[]));
   const remote = (cloud ?? []).filter((b) => !localIds.has(b.book_id));
