@@ -31,6 +31,11 @@ function describeError(e: unknown): { message: string; detail: string } {
   return { message: err.message, detail };
 }
 
+// Per-file size cap (matches iOS). Pro cloud sync is bounded to 5GB total; a 100MB/file ceiling
+// keeps any single book reasonable for storage + in-browser memory during detection.
+const MAX_PDF_MB = 100;
+const MAX_PDF_BYTES = MAX_PDF_MB * 1024 * 1024;
+
 export function ImportWizard() {
   const setView = useApp((s) => s.setView);
   const [phase, setPhase] = useState<Phase>({ k: "idle" });
@@ -66,6 +71,14 @@ export function ImportWizard() {
 
   const handleFile = useCallback(
     async (file: File) => {
+      if (file.size > MAX_PDF_BYTES) {
+        setPhase({
+          k: "error",
+          message: `PDFが大きすぎます（${Math.round(file.size / 1024 / 1024)}MB）。1ファイル ${MAX_PDF_MB}MB までです。`,
+          detail: `file: ${file.name}\nsize: ${file.size} bytes`,
+        });
+        return;
+      }
       setName(file.name.replace(/\.pdf$/i, ""));
       await detect(file.slice(0, file.size, "application/pdf"));
     },
