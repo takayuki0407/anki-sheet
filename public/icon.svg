@@ -1,0 +1,27 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7d9af"/>
+      <stop offset="1" stop-color="#e0a35f"/>
+    </linearGradient>
+    <linearGradient id="sheet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ef4444"/>
+      <stop offset="1" stop-color="#dc2626"/>
+    </linearGradient>
+    <filter id="sh" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#6e3208" flood-opacity="0.30"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <g filter="url(#sh)"><rect x="252" y="186" width="520" height="652" rx="40" fill="#fffdf7"/></g>
+  <g fill="#3a2e22">
+    <rect x="312" y="286" width="404" height="36" rx="18"/>
+    <rect x="312" y="372" width="320" height="36" rx="18"/>
+  </g>
+  <g fill="#3a2e22">
+    <rect x="312" y="566" width="384" height="36" rx="18"/>
+    <rect x="312" y="652" width="300" height="36" rx="18"/>
+  </g>
+  <g filter="url(#sh)"><rect x="222" y="506" width="580" height="248" rx="42" fill="url(#sheet)"/></g>
+  <rect x="222" y="506" width="580" height="10" rx="5" fill="#ffffff" opacity="0.28"/>
+</svg>
