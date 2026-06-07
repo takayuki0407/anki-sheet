@@ -11,6 +11,8 @@ import {
 import { renderCover } from "../pdf/pdfEngine";
 import { downloadBlob, exportBackup, importBackup } from "../db/backup";
 import { useApp } from "../store/session";
+import { useAuth } from "../auth/useAuth";
+import { unregisterBook } from "../sync/api";
 import type { DeckRow } from "../types";
 
 function dateStamp(): string {
@@ -137,7 +139,10 @@ function DeckBook({ deck }: { deck: DeckRow }) {
   const count = useLiveQuery(() => answerCount(deck.id!), [deck.id]);
 
   const onDelete = async () => {
-    if (confirm(`「${deck.name}」を削除しますか？`)) await deleteDeck(deck.id!);
+    if (!confirm(`「${deck.name}」を削除しますか？`)) return;
+    await deleteDeck(deck.id!);
+    // Free the account-global slot (best-effort; ignore when offline / signed out).
+    if (deck.bookId && useAuth.getState().user) void unregisterBook(deck.bookId).catch(() => {});
   };
 
   return (

@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 import { CancelledError, detectClozesInPdf, type PdfDetectionResult } from "../pdf/pdfEngine";
-import { importBookmarks, importDeck } from "../db/repo";
+import { deleteDeck, importBookmarks, importDeck } from "../db/repo";
 import { useApp } from "../store/session";
+import { useAuth } from "../auth/useAuth";
+import { registerBook } from "../sync/api";
 import {
   COLOR_PRESETS,
   DEFAULT_MAGENTA_BAND,
@@ -106,8 +108,11 @@ export function ImportWizard() {
     const { result, blob } = phase;
     setPhase({ k: "saving" });
     try {
+      const deckName = name.trim() || "無題のデッキ";
+      const bookId = crypto.randomUUID();
       const deckId = await importDeck({
-        name: name.trim() || "無題のデッキ",
+        name: deckName,
+        bookId,
         blob,
         pageCount: result.pageCount,
         pageW: result.pageW,
@@ -115,6 +120,26 @@ export function ImportWizard() {
         color: colorRef.current,
         clozes: result.clozes,
       });
+      // Account-global cap: reserve a slot when signed in. Offline / signed-out / network errors
+      // fail OPEN (keep the book locally) so the local-first experience never breaks; only an
+      // explicit "limit reached" from the server blocks (and rolls back the just-imported book).
+      if (useAuth.getState().user) {
+        try {
+          const r = await registerBook(bookId, deckName, result.pageCount);
+          if (!r.ok && r.limitReached) {
+            await deleteDeck(deckId);
+            setPhase({
+              k: "error",
+              message: `アカウントの保存上限（${r.limit ?? 10}冊）に達しています。`,
+              detail:
+                "Standardプランは全ての端末あわせて10冊までです。どれかを削除するか、Pro（無制限）にアップグレードしてください。",
+            });
+            return;
+          }
+        } catch {
+          /* network/auth error — keep the book locally; the registry reconciles later */
+        }
+      }
       // Import the PDF's built-in outline (目次) as bookmarks, if it has one.
       if (result.outline.length) await importBookmarks(deckId, result.outline);
       // Cover is generated lazily in the bookshelf, so import doesn't load the PDF
