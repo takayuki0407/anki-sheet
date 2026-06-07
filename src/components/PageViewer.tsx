@@ -15,6 +15,8 @@ import { loadPdf } from "../pdf/pdfEngine";
 import { PageOverlay, type FitMode, type MaskGroup } from "../render/PageOverlay";
 import { ContinuousView } from "./ContinuousView";
 import { useApp } from "../store/session";
+import { useAuth } from "../auth/useAuth";
+import { getProgress, putProgress } from "../sync/api";
 import type { BookmarkRow, CardRow, PdfRow } from "../types";
 
 type Status = "loading" | "ready" | "error";
@@ -88,11 +90,13 @@ function RedSheet({
 /** Standalone digital red sheet: page through (or scroll) a PDF, hide/show answers. */
 export function PageViewer({ deckId }: { deckId: number }) {
   const setView = useApp((s) => s.setView);
+  const user = useAuth((s) => s.user);
   const [status, setStatus] = useState<Status>("loading");
   const [errMsg, setErrMsg] = useState("");
   const [pdf, setPdf] = useState<PdfRow>();
   const [deckName, setDeckName] = useState("");
   const docRef = useRef<PDFDocumentProxy | null>(null);
+  const bookIdRef = useRef<string | undefined>(undefined); // for cross-device progress sync
   const [docReady, setDocReady] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
@@ -172,6 +176,21 @@ export function PageViewer({ deckId }: { deckId: number }) {
         setRedMode(d.redMode ?? (d.sheetOn === false ? "off" : "mask"));
         if (d.sheetBand) setBand(d.sheetBand);
         setRevealed(new Set(d.revealed ?? []));
+        bookIdRef.current = d.bookId;
+        // Pro cross-device progress: if the cloud copy is newer, resume from it (reading position /
+        // mode / red-sheet — device-independent fields; reveal state stays local for now).
+        if (useAuth.getState().user && d.bookId) {
+          const cloud = await getProgress(d.bookId).catch(() => null);
+          if (!cancelled && cloud && cloud.updatedAt > (d.progressAt ?? 0)) {
+            const c = cloud.data;
+            if (typeof c.lastPage === "number")
+              setPageIndex(Math.max(0, Math.min(p.pageCount - 1, c.lastPage)));
+            if (c.lastMode) setMode(c.lastMode);
+            if (c.redMode) setRedMode(c.redMode);
+            if (c.sheetBand) setBand(c.sheetBand);
+            void updateDeck(deckId, { ...c, progressAt: cloud.updatedAt });
+          }
+        }
         setDocReady(true);
         setStatus("ready");
       } catch (e) {
@@ -212,8 +231,22 @@ export function PageViewer({ deckId }: { deckId: number }) {
     );
     return () => clearTimeout(id);
   }, [revealed, redMode, band, status, deckId]);
+  // Pro cross-device progress: push the device-independent reading state to the cloud (debounced).
+  useEffect(() => {
+    if (status !== "ready" || !user || !bookIdRef.current) return;
+    const id = setTimeout(() => {
+      void updateDeck(deckId, { progressAt: Date.now() });
+      void putProgress(bookIdRef.current!, {
+        lastPage: pageIndex,
+        lastMode: mode,
+        redMode,
+        sheetBand: band,
+      }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [pageIndex, mode, redMode, band, status, deckId, user]);
   const exit = () => {
-    if (status === "ready")
+    if (status === "ready") {
       void updateDeck(deckId, {
         lastPage: pageIndex,
         lastMode: mode,
@@ -221,6 +254,14 @@ export function PageViewer({ deckId }: { deckId: number }) {
         redMode,
         sheetBand: band,
       });
+      if (user && bookIdRef.current)
+        void putProgress(bookIdRef.current, {
+          lastPage: pageIndex,
+          lastMode: mode,
+          redMode,
+          sheetBand: band,
+        }).catch(() => {});
+    }
     setView({ name: "decks" });
   };
   // +/− step by 10% (snapped to the 10% grid so it stays clean after a wheel zoom).

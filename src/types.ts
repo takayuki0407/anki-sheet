@@ -66,6 +66,8 @@ export interface DeckRow {
   redMode?: "mask" | "sheet" | "off";
   /** Manual red-sheet band position + height (px) last used. */
   sheetBand?: { top: number; height: number };
+  /** When the (cross-device-syncable) progress was last changed locally — for last-write-wins. */
+  progressAt?: number;
 }
 
 export interface PdfRow {

@@ -105,3 +105,37 @@ export async function getContent(bookId: string): Promise<unknown> {
   if (!res.ok) throw new Error(`getContent failed: ${res.status}`);
   return res.json();
 }
+
+// ---- Pro progress sync (cross-device reading position / mode / red-sheet) ----
+// NB: device-independent fields only. `revealed` is card-id based (ids differ per device), so it
+// stays local for now — cross-device reveal sync needs stable card keys (a later step).
+export interface ProgressData {
+  lastPage?: number;
+  lastMode?: "scroll" | "paged";
+  redMode?: "mask" | "sheet" | "off";
+  sheetBand?: { top: number; height: number };
+}
+
+export async function getProgress(
+  bookId: string,
+): Promise<{ data: ProgressData; updatedAt: number } | null> {
+  const res = await authedFetch(`/progress/${encodeURIComponent(bookId)}`);
+  if (res.status === 404 || res.status === 403) return null;
+  if (!res.ok) throw new Error(`getProgress failed: ${res.status}`);
+  const row = (await res.json()) as { data: string; updated_at: number };
+  try {
+    return { data: JSON.parse(row.data) as ProgressData, updatedAt: row.updated_at };
+  } catch {
+    return null;
+  }
+}
+
+/** Push progress (Pro). 403 (standard) is a silent no-op. */
+export async function putProgress(bookId: string, data: ProgressData): Promise<void> {
+  const res = await authedFetch(`/progress/${encodeURIComponent(bookId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ data }),
+  });
+  if (res.status === 403) return;
+  if (!res.ok) throw new Error(`putProgress failed: ${res.status}`);
+}
