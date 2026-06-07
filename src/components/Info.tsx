@@ -1,8 +1,9 @@
 // 情報・ヘルプ画面 — usage help, account/data notes, support + legal links, about.
 // Reachable from the topbar "情報" link.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../store/session";
 import { signOutUser, useAuth } from "../auth/useAuth";
+import { listBooks, type AccountBooks } from "../sync/api";
 
 const SUPPORT_EMAIL = "zabieru.0407@gmail.com";
 
@@ -41,6 +42,20 @@ function Faq({ q, a }: { q: string; a: string }) {
 export function Info() {
   const setView = useApp((s) => s.setView);
   const user = useAuth((s) => s.user);
+  const [usage, setUsage] = useState<AccountBooks | null>(null);
+  useEffect(() => {
+    if (!user) {
+      setUsage(null);
+      return;
+    }
+    let live = true;
+    void listBooks()
+      .then((u) => live && setUsage(u))
+      .catch(() => live && setUsage(null));
+    return () => {
+      live = false;
+    };
+  }, [user]);
   return (
     <div className="panel info-page">
       <div className="panel-head">
@@ -65,6 +80,24 @@ export function Info() {
               <p>
                 ログイン中：<strong>{user.email ?? "（メール未設定）"}</strong>
               </p>
+              {usage ? (
+                <p className="usage-line">
+                  {usage.unlimited ? (
+                    <>
+                      取り込み：<strong>{usage.count} 冊</strong>（
+                      {usage.tier === "admin" ? "管理者" : "Pro"}・無制限）
+                    </>
+                  ) : (
+                    <>
+                      取り込み：
+                      <strong>
+                        {usage.count} / {usage.limit} 冊
+                      </strong>
+                      （あと {Math.max(0, usage.limit - usage.count)} 冊）
+                    </>
+                  )}
+                </p>
+              ) : null}
               <p className="muted small">
                 同じアカウントで iOSアプリ にもログインできます。Proでは端末・プラットフォーム間で
                 クラウド同期されます。

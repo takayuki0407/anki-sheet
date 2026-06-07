@@ -1,9 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import { CancelledError, detectClozesInPdf, type PdfDetectionResult } from "../pdf/pdfEngine";
-import { deleteDeck, importBookmarks, importDeck } from "../db/repo";
+import { importBookmarks, importDeck } from "../db/repo";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
 import { registerBook } from "../sync/api";
+import { BookLimitDialog, type PendingImport } from "./BookLimitDialog";
 import {
   COLOR_PRESETS,
   DEFAULT_MAGENTA_BAND,
@@ -16,6 +17,7 @@ type Phase =
   | { k: "detecting"; page: number; total: number; found: number }
   | { k: "ready"; result: PdfDetectionResult; blob: Blob }
   | { k: "saving" }
+  | { k: "overlimit"; pending: PendingImport }
   | { k: "error"; message: string; detail: string };
 
 // Capture everything useful about a failure (name, message, full stack, build id,
@@ -103,48 +105,54 @@ export function ImportWizard() {
     if (f && f.type === "application/pdf") void handleFile(f);
   };
 
+  // Create the local deck (after a slot has been reserved) and open the bookshelf. Cover is
+  // generated lazily in the bookshelf, so import doesn't load the PDF twice (lower peak memory).
+  const finishImport = useCallback(
+    async (p: PendingImport) => {
+      setPhase({ k: "saving" });
+      const deckId = await importDeck({
+        name: p.deckName,
+        bookId: p.bookId,
+        blob: p.blob,
+        pageCount: p.result.pageCount,
+        pageW: p.result.pageW,
+        pageH: p.result.pageH,
+        color: colorRef.current,
+        clozes: p.result.clozes,
+      });
+      if (p.result.outline.length) await importBookmarks(deckId, p.result.outline);
+      setView({ name: "decks" });
+    },
+    [setView],
+  );
+
   const save = async () => {
     if (phase.k !== "ready") return;
     const { result, blob } = phase;
+    const pending: PendingImport = {
+      bookId: crypto.randomUUID(),
+      deckName: name.trim() || "無題のデッキ",
+      result,
+      blob,
+      limit: 10,
+    };
     setPhase({ k: "saving" });
     try {
-      const deckName = name.trim() || "無題のデッキ";
-      const bookId = crypto.randomUUID();
-      const deckId = await importDeck({
-        name: deckName,
-        bookId,
-        blob,
-        pageCount: result.pageCount,
-        pageW: result.pageW,
-        pageH: result.pageH,
-        color: colorRef.current,
-        clozes: result.clozes,
-      });
-      // Account-global cap: reserve a slot when signed in. Offline / signed-out / network errors
-      // fail OPEN (keep the book locally) so the local-first experience never breaks; only an
-      // explicit "limit reached" from the server blocks (and rolls back the just-imported book).
+      // Reserve an account-global slot FIRST when signed in. limit_reached -> the over-limit
+      // chooser (pick a book to delete, or upgrade). Offline / signed-out / network errors fail
+      // OPEN (import locally) so the local-first experience never breaks.
       if (useAuth.getState().user) {
         try {
-          const r = await registerBook(bookId, deckName, result.pageCount);
+          const r = await registerBook(pending.bookId, pending.deckName, result.pageCount);
           if (!r.ok && r.limitReached) {
-            await deleteDeck(deckId);
-            setPhase({
-              k: "error",
-              message: `アカウントの保存上限（${r.limit ?? 10}冊）に達しています。`,
-              detail:
-                "Standardプランは全ての端末あわせて10冊までです。どれかを削除するか、Pro（無制限）にアップグレードしてください。",
-            });
+            setPhase({ k: "overlimit", pending: { ...pending, limit: r.limit ?? 10 } });
             return;
           }
         } catch {
-          /* network/auth error — keep the book locally; the registry reconciles later */
+          /* fail open — keep the book locally; the registry reconciles later */
         }
       }
-      // Import the PDF's built-in outline (目次) as bookmarks, if it has one.
-      if (result.outline.length) await importBookmarks(deckId, result.outline);
-      // Cover is generated lazily in the bookshelf, so import doesn't load the PDF
-      // a second time (keeps peak memory lower — important on iOS).
-      setView({ name: "decks" });
+      await finishImport(pending);
     } catch (e) {
       setPhase({ k: "error", ...describeError(e) });
     }
@@ -282,6 +290,18 @@ export function ImportWizard() {
             </button>
           </div>
         </div>
+      )}
+      {phase.k === "overlimit" && (
+        <BookLimitDialog
+          pending={phase.pending}
+          onImport={finishImport}
+          onCancel={() =>
+            setPhase({ k: "ready", result: phase.pending.result, blob: phase.pending.blob })
+          }
+          onUpgrade={() =>
+            alert("Proへのアップグレードは現在 iOSアプリ からご利用いただけます（Web版の課金は準備中です）。")
+          }
+        />
       )}
       <p className="build-tag">build {__BUILD_ID__}</p>
     </div>

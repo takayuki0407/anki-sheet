@@ -2,6 +2,7 @@
 // in `npm run dev` the path 404s (no Functions locally) and callers fail open. The Firebase ID
 // token authenticates each call; the Worker maps it to the account uid.
 import { getIdToken } from "../auth/useAuth";
+import { deviceLabel } from "./device";
 
 const BASE = "/api/sync";
 
@@ -29,7 +30,7 @@ export async function registerBook(
 ): Promise<RegisterResult> {
   const res = await authedFetch("/books", {
     method: "POST",
-    body: JSON.stringify({ book_id: bookId, name, page_count: pageCount }),
+    body: JSON.stringify({ book_id: bookId, name, page_count: pageCount, device: deviceLabel() }),
   });
   if (res.status === 403) {
     const b = (await res.json().catch(() => ({}))) as { count?: number; limit?: number };
@@ -50,11 +51,20 @@ export interface AccountBook {
   name: string;
   size: number;
   page_count: number;
+  device: string | null;
   updated_at: number;
 }
 
-/** List the account's books (across all devices) with the current count + cap. */
-export async function listBooks(): Promise<{ books: AccountBook[]; count: number; limit: number }> {
+export interface AccountBooks {
+  books: AccountBook[];
+  count: number;
+  limit: number;
+  tier: "standard" | "pro" | "admin";
+  unlimited: boolean;
+}
+
+/** List the account's books (across all devices) with the current count + cap + tier. */
+export async function listBooks(): Promise<AccountBooks> {
   const res = await authedFetch("/books");
   if (!res.ok) throw new Error(`list failed: ${res.status}`);
   return res.json();
