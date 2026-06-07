@@ -47,46 +47,33 @@ function RedSheet({
   onChange: (b: Band) => void;
   hostRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  const drag = useRef<{ mode: "move" | "resize"; y: number; top: number; h: number } | null>(null);
-  const begin = (mode: "move" | "resize") => (e: React.PointerEvent) => {
+  const drag = useRef<{ y: number; top: number } | null>(null);
+  const begin = (e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    drag.current = { mode, y: e.clientY, top: band.top, h: band.height };
+    drag.current = { y: e.clientY, top: band.top };
   };
+  // Only the top edge moves (the bottom is pinned to the viewport bottom via CSS).
   const move = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
     const hh = hostRef.current?.clientHeight ?? 0;
-    const dy = e.clientY - d.y;
-    if (d.mode === "move") {
-      onChange({ top: Math.max(0, Math.min(Math.max(0, hh - band.height), d.top + dy)), height: band.height });
-    } else {
-      // Resize from the TOP edge: the bottom stays fixed, the top moves.
-      const bottom = d.top + d.h;
-      const top = Math.max(0, Math.min(bottom - 28, d.top + dy));
-      onChange({ top, height: bottom - top });
-    }
+    const top = Math.max(0, Math.min(Math.max(0, hh - 28), d.top + (e.clientY - d.y)));
+    onChange({ top, height: Math.max(0, hh - top) });
   };
   const end = (e: React.PointerEvent) => {
     drag.current = null;
     (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
   };
+  // The sheet body has pointer-events:none (scroll the page through it); only the top grip drags.
   return (
     <>
-      <div
-        className="red-sheet"
-        style={{ top: band.top, height: band.height }}
-        onPointerDown={begin("move")}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerCancel={end}
-      />
-      <div className="red-sheet-soft" style={{ top: band.top, height: band.height }} />
+      <div className="red-sheet" style={{ top: band.top }} />
       <div
         className="red-sheet-grip"
         style={{ top: band.top - 11 }}
-        onPointerDown={begin("resize")}
+        onPointerDown={begin}
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}

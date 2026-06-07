@@ -488,30 +488,15 @@ body {
   position: absolute;
   left: 0;
   right: 0;
+  bottom: 0; /* the bottom edge stays at the viewport bottom; only the top edge moves */
   z-index: 6;
-  /* Pure-red multiply maps red/magenta answers to (R,0,0) = the red-tinted background, so they
-     FULLY vanish while black text (→ black) stays readable. */
-  background: #ff0000;
+  /* Muted-red multiply keeps black text BLACK (black × red = black) while it desaturates the
+     red/magenta answers toward the red background (a slight trace may remain). No second
+     "lighten" layer — that was what turned black grey. */
+  background: #c83232;
   mix-blend-mode: multiply;
-  border-radius: 6px;
-  box-shadow: 0 0 0 2px rgba(214, 51, 132, 0.55) inset;
-  cursor: grab;
-  touch-action: none;
-}
-.red-sheet:active {
-  cursor: grabbing;
-}
-/* A second, plain-blend layer over the multiply-red that LIGHTENS it toward a gentle pink. After
-   the multiply the answers are identical to the background, so this uniform layer keeps them
-   hidden while softening the harsh red and keeping black text legible. (Whiteness = gentleness.) */
-.red-sheet-soft {
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 6;
-  background: rgba(255, 255, 255, 0.45);
-  border-radius: 6px;
-  pointer-events: none;
+  box-shadow: inset 0 2px 0 rgba(190, 24, 60, 0.6); /* a line marking the top edge */
+  pointer-events: none; /* scroll / swipe the page through the sheet */
 }
 .red-sheet-grip {
   position: absolute;
