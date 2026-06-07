@@ -8,7 +8,8 @@ export type View =
   | { name: "settings"; deckId: number }
   | { name: "info" }
   | { name: "login" }
-  | { name: "pricing" };
+  | { name: "pricing" }
+  | { name: "service" };
 
 interface AppState {
   view: View;

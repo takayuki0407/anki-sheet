@@ -3,13 +3,20 @@ import { useApp } from "./store/session";
 import { requestPersistentStorage } from "./db/backup";
 import { initAuth } from "./auth/useAuth";
 import { Home } from "./components/Home";
+import { Service } from "./components/Service";
+import { Pricing } from "./components/Pricing";
+import { MarketingNav } from "./components/MarketingNav";
+import { SiteFooter } from "./components/SiteFooter";
 import { DeckList } from "./components/DeckList";
 import { ImportWizard } from "./components/ImportWizard";
 import { PageViewer } from "./components/PageViewer";
 import { Settings } from "./components/Settings";
 import { Info } from "./components/Info";
 import { Login } from "./components/Login";
-import { Pricing } from "./components/Pricing";
+
+// The marketing site (Home / Service / Pricing) gets the nav + footer chrome; the app pages
+// (bookshelf / viewer / …) get the minimal app topbar instead.
+const MARKETING = new Set(["home", "service", "pricing"]);
 
 export function App() {
   const view = useApp((s) => s.view);
@@ -18,28 +25,34 @@ export function App() {
     void requestPersistentStorage();
     initAuth(); // start the Firebase auth listener
   }, []);
+  const isMarketing = MARKETING.has(view.name);
   return (
-    <div className="app">
-      <header className="topbar">
-        <button className="brand brand-btn" onClick={() => setView({ name: "home" })}>
-          Anki-sheet
-        </button>
-        <span className="brand-sub">赤シート暗記</span>
-        {/* One entry for account + plan + help (the Info screen holds all of them). */}
-        <button className="btn ghost sm topbar-info" onClick={() => setView({ name: "info" })}>
-          アカウント・情報
-        </button>
-      </header>
+    <div className={isMarketing ? "app marketing" : "app"}>
+      {isMarketing ? (
+        <MarketingNav current={view.name} />
+      ) : (
+        <header className="topbar">
+          <button className="brand brand-btn" onClick={() => setView({ name: "home" })}>
+            Anki-sheet
+          </button>
+          <span className="brand-sub">赤シート暗記</span>
+          <button className="btn ghost sm topbar-info" onClick={() => setView({ name: "info" })}>
+            アカウント・情報
+          </button>
+        </header>
+      )}
       <main className="content">
         {view.name === "home" && <Home />}
+        {view.name === "service" && <Service />}
+        {view.name === "pricing" && <Pricing />}
         {view.name === "decks" && <DeckList />}
         {view.name === "import" && <ImportWizard />}
         {view.name === "viewer" && <PageViewer deckId={view.deckId} />}
         {view.name === "settings" && <Settings deckId={view.deckId} />}
         {view.name === "info" && <Info />}
         {view.name === "login" && <Login />}
-        {view.name === "pricing" && <Pricing />}
       </main>
+      {isMarketing && <SiteFooter />}
     </div>
   );
 }

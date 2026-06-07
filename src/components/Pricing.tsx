@@ -54,9 +54,6 @@ export function Pricing() {
   return (
     <div className="pricing">
       <section className="pricing-hero">
-        <button className="link-btn pricing-back" onClick={() => setView({ name: "home" })}>
-          ← ホーム
-        </button>
         <h1 className="pricing-title">学習に合わせて選べる料金プラン</h1>
         <p className="pricing-lead">7日間は無料でお試し。いつでも解約できます。</p>
         <div className="pricing-toggle" role="group" aria-label="請求サイクル">

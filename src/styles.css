@@ -1326,6 +1326,121 @@ body {
   margin: 0;
 }
 
+/* Marketing nav (Home / Service / Pricing pages) */
+.mkt-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.mkt-brand {
+  background: none;
+  border: none;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--sand-deep);
+  cursor: pointer;
+  padding: 4px;
+}
+.mkt-links {
+  display: flex;
+  gap: 2px;
+  margin-left: 6px;
+}
+.mkt-link {
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+.mkt-link:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.mkt-link.active {
+  color: var(--sand-deep);
+  font-weight: 700;
+}
+.mkt-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 560px) {
+  .mkt-nav {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .mkt-links {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    justify-content: center;
+  }
+}
+
+/* Generic marketing page hero (Service) */
+.page-hero {
+  text-align: center;
+  padding: 28px 16px 8px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.page-title {
+  font-size: 30px;
+  font-weight: 800;
+  margin: 8px 0 8px;
+}
+.page-lead {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.7;
+  margin: 0;
+}
+.home-more {
+  margin: 10px 0 0;
+}
+
+/* Shared site footer */
+.site-footer {
+  border-top: 1px solid var(--line);
+  margin-top: 48px;
+  padding: 24px 16px;
+  background: var(--card);
+}
+.site-footer-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.site-footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.site-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+.site-footer-links a {
+  color: var(--ocean);
+  font-size: 13px;
+  text-decoration: none;
+}
+.site-footer-copy {
+  text-align: center;
+  margin: 16px 0 0;
+}
+
 /* Import color picker */
 .import-color {
   display: flex;
