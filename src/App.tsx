@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useApp } from "./store/session";
 import { requestPersistentStorage } from "./db/backup";
-import { initAuth, useAuth } from "./auth/useAuth";
+import { initAuth } from "./auth/useAuth";
 import { Home } from "./components/Home";
 import { DeckList } from "./components/DeckList";
 import { ImportWizard } from "./components/ImportWizard";
@@ -13,7 +13,6 @@ import { Login } from "./components/Login";
 export function App() {
   const view = useApp((s) => s.view);
   const setView = useApp((s) => s.setView);
-  const user = useAuth((s) => s.user);
   useEffect(() => {
     void requestPersistentStorage();
     initAuth(); // start the Firebase auth listener
@@ -25,15 +24,9 @@ export function App() {
           Anki-sheet
         </button>
         <span className="brand-sub">赤シート暗記</span>
-        <button
-          className="btn ghost sm topbar-account"
-          onClick={() => setView({ name: user ? "info" : "login" })}
-          title={user ? (user.email ?? "アカウント") : "ログイン"}
-        >
-          {user ? "アカウント" : "ログイン"}
-        </button>
+        {/* One entry for account + plan + help (the Info screen holds all of them). */}
         <button className="btn ghost sm topbar-info" onClick={() => setView({ name: "info" })}>
-          情報
+          アカウント・情報
         </button>
       </header>
       <main className="content">

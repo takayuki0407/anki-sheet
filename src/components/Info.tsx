@@ -39,6 +39,16 @@ function Faq({ q, a }: { q: string; a: string }) {
   );
 }
 
+function planLabel(tier?: string): string {
+  return tier === "pro"
+    ? "Pro"
+    : tier === "admin"
+      ? "管理者（無制限）"
+      : tier === "standard"
+        ? "Standard"
+        : "—";
+}
+
 export function Info() {
   const setView = useApp((s) => s.setView);
   const user = useAuth((s) => s.user);
@@ -119,6 +129,82 @@ export function Info() {
               <button className="btn primary sm" onClick={() => setView({ name: "login" })}>
                 ログイン / アカウント作成
               </button>
+            </>
+          )}
+        </div>
+      </section>
+
+      <section className="info-section">
+        <h3 className="section">プラン</h3>
+        <div className="info-card">
+          {!user ? (
+            <p className="muted small">
+              プランの確認・変更には{" "}
+              <button className="linklike" onClick={() => setView({ name: "login" })}>
+                ログイン
+              </button>
+              してください。
+            </p>
+          ) : (
+            <>
+              <p>
+                現在のプラン：<strong>{planLabel(usage?.tier)}</strong>
+              </p>
+              <div className="plan-compare">
+                <div className={`plan-col ${usage?.tier === "standard" ? "current" : ""}`}>
+                  <h4>Standard</h4>
+                  <p className="plan-price">
+                    ¥300<span className="muted small"> /月</span>
+                    <br />
+                    <span className="muted small">¥2,500 /年</span>
+                  </p>
+                  <ul>
+                    <li>本を10冊まで取り込み</li>
+                    <li>全端末で冊数を管理</li>
+                    <li className="muted">クラウド同期なし</li>
+                  </ul>
+                </div>
+                <div className={`plan-col pro ${usage?.tier === "pro" ? "current" : ""}`}>
+                  <h4>Pro</h4>
+                  <p className="plan-price">
+                    ¥600<span className="muted small"> /月</span>
+                    <br />
+                    <span className="muted small">¥5,000 /年</span>
+                  </p>
+                  <ul>
+                    <li>本を無制限に取り込み</li>
+                    <li>クラウド保存 5GB</li>
+                    <li>端末・プラットフォーム間で同期</li>
+                  </ul>
+                </div>
+              </div>
+              {usage?.tier === "admin" ? (
+                <p className="muted small">
+                  管理者アカウントのため、すべての機能を無制限でご利用いただけます。
+                </p>
+              ) : usage?.tier === "pro" ? (
+                <button
+                  className="btn ghost sm"
+                  onClick={() =>
+                    alert(
+                      "プランの変更・解約は現在 iOSアプリ から行えます（Web版の課金は準備中です）。",
+                    )
+                  }
+                >
+                  プランを変更
+                </button>
+              ) : (
+                <button
+                  className="btn primary sm"
+                  onClick={() =>
+                    alert(
+                      "Proへのアップグレードは現在 iOSアプリ から行えます（Web版の課金は準備中です）。",
+                    )
+                  }
+                >
+                  Pro にアップグレード
+                </button>
+              )}
             </>
           )}
         </div>
