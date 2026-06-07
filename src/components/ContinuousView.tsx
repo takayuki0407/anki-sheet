@@ -273,8 +273,8 @@ function PageSlot({
                     top: r.y * fitScale,
                     width: r.w * fitScale,
                     height: h,
-                    // Vertical tap-target padding, generous + scaled to the line height.
-                    "--tap-pad": `${Math.max(18, h * 0.9)}px`,
+                    // Mouse-only: a slightly-larger click target (~0.3x line height). See .mask::after.
+                    "--tap-pad": `${Math.max(4, h * 0.3)}px`,
                   } as CSSProperties
                 }
                 onClick={() => onToggle(c.id!)}

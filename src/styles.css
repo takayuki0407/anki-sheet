@@ -458,19 +458,21 @@ body {
   border-radius: 2px;
   pointer-events: none;
 }
-/* Enlarge the answer mask / reveal-zone TAP target vertically with a transparent pseudo-
-   element, so a thin one-line mask is easy to tap/click (clicks on ::after dispatch to the
-   parent element). The visible red mask stays tight — it never covers neighbouring lines.
-   The pad is set inline per mask (--tap-pad) so it scales with the mask height and stays
-   generous at any zoom. Applies to MOUSE and TOUCH alike. */
-.mask::after,
-.reveal-zone::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(-1 * var(--tap-pad, 16px));
-  bottom: calc(-1 * var(--tap-pad, 16px));
+/* MOUSE ONLY: a slightly-larger click target than the (thin) red mask, via a transparent
+   pseudo-element, so the cursor doesn't have to land exactly on the rectangle (clicks on
+   ::after dispatch to the parent). Touch devices don't need it — the pan threshold already
+   distinguishes a tap from a scroll — so it's scoped to fine pointers. The pad is small
+   (set inline per mask as --tap-pad, ~0.3x the line height) and the visible red stays tight. */
+@media (pointer: fine) {
+  .mask::after,
+  .reveal-zone::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(-1 * var(--tap-pad, 4px));
+    bottom: calc(-1 * var(--tap-pad, 4px));
+  }
 }
 
 /* Settings / tuner */
