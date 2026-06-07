@@ -5,14 +5,10 @@
 // Tier comes from the `users` row (kept fresh by the RevenueCat webhook — TODO). Until that's
 // wired, everyone defaults to 'standard' (the safe, most-restrictive paid cap).
 import { json, type Env, type Fn } from "../../_lib/types";
-
-const STANDARD_DECK_LIMIT = 10;
+import { getTier, STANDARD_DECK_LIMIT } from "../../_lib/tier";
 
 async function tierLimit(env: Env, uid: string): Promise<number> {
-  const row = await env.DB.prepare("SELECT tier FROM users WHERE uid = ?").bind(uid).first<{
-    tier: string;
-  }>();
-  return row?.tier === "pro" ? Number.MAX_SAFE_INTEGER : STANDARD_DECK_LIMIT;
+  return (await getTier(env, uid)) === "pro" ? Number.MAX_SAFE_INTEGER : STANDARD_DECK_LIMIT;
 }
 
 export const onRequestGet: Fn = async (ctx) => {

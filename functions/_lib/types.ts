@@ -17,8 +17,24 @@ export interface D1DB {
   prepare(query: string): D1PreparedStatement;
 }
 
+// Minimal R2 surface we use. PDFS is optional: it's only bound after R2 is enabled in the
+// dashboard + [[r2_buckets]] is uncommented in wrangler.toml. Handlers 503 when it's absent.
+export interface R2Object {
+  key: string;
+  size: number;
+}
+export interface R2ObjectBody extends R2Object {
+  body: ReadableStream;
+}
+export interface R2Bucket {
+  put(key: string, value: ReadableStream | ArrayBuffer | string | null): Promise<R2Object>;
+  get(key: string): Promise<R2ObjectBody | null>;
+  delete(key: string): Promise<void>;
+}
+
 export interface Env {
   DB: D1DB;
+  PDFS?: R2Bucket;
   FIREBASE_PROJECT_ID: string;
 }
 
