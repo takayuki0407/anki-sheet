@@ -106,14 +106,16 @@ export async function getContent(bookId: string): Promise<unknown> {
   return res.json();
 }
 
-// ---- Pro progress sync (cross-device reading position / mode / red-sheet) ----
-// NB: device-independent fields only. `revealed` is card-id based (ids differ per device), so it
-// stays local for now — cross-device reveal sync needs stable card keys (a later step).
+// ---- Pro progress sync (cross-device reading position / mode / red-sheet / revealed) ----
+// `revealedKeys` are device-portable "pageIndex:ordinal" keys (NOT local card ids, which differ
+// per device) — the ordinal is the card's position-sorted index on its page, identical across
+// devices for the same detected book, so revealed answers map correctly.
 export interface ProgressData {
   lastPage?: number;
   lastMode?: "scroll" | "paged";
   redMode?: "mask" | "sheet" | "off";
   sheetBand?: { top: number; height: number };
+  revealedKeys?: string[];
 }
 
 export async function getProgress(

@@ -88,9 +88,31 @@ function RedSheet({
 }
 
 /** Standalone digital red sheet: page through (or scroll) a PDF, hide/show answers. */
+/** Device-portable reveal keys: a card's "pageIndex:ordinal", where ordinal is its index among
+ *  the page's cards sorted by position (y,x) — identical across devices for the same detected
+ *  book, so revealed answers map correctly despite local card ids differing per device. */
+function cardKeyMaps(cardsByPage: Map<number, CardRow[]>) {
+  const idToKey = new Map<number, string>();
+  const keyToId = new Map<string, number>();
+  for (const [page, cards] of cardsByPage) {
+    [...cards]
+      .sort((a, b) => a.answerRect.y - b.answerRect.y || a.answerRect.x - b.answerRect.x)
+      .forEach((c, i) => {
+        if (c.id != null) {
+          const key = `${page}:${i}`;
+          idToKey.set(c.id, key);
+          keyToId.set(key, c.id);
+        }
+      });
+  }
+  return { idToKey, keyToId };
+}
+
 export function PageViewer({ deckId }: { deckId: number }) {
   const setView = useApp((s) => s.setView);
   const user = useAuth((s) => s.user);
+  // Reveal keys pulled from the cloud, applied once the page's cards have loaded (see effect).
+  const [pendingRevealKeys, setPendingRevealKeys] = useState<string[] | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [errMsg, setErrMsg] = useState("");
   const [pdf, setPdf] = useState<PdfRow>();
@@ -182,12 +204,13 @@ export function PageViewer({ deckId }: { deckId: number }) {
         if (useAuth.getState().user && d.bookId) {
           const cloud = await getProgress(d.bookId).catch(() => null);
           if (!cancelled && cloud && cloud.updatedAt > (d.progressAt ?? 0)) {
-            const c = cloud.data;
+            const { revealedKeys, ...c } = cloud.data;
             if (typeof c.lastPage === "number")
               setPageIndex(Math.max(0, Math.min(p.pageCount - 1, c.lastPage)));
             if (c.lastMode) setMode(c.lastMode);
             if (c.redMode) setRedMode(c.redMode);
             if (c.sheetBand) setBand(c.sheetBand);
+            setPendingRevealKeys(revealedKeys ?? []); // applied once this book's cards have loaded
             void updateDeck(deckId, { ...c, progressAt: cloud.updatedAt });
           }
         }
@@ -207,6 +230,16 @@ export function PageViewer({ deckId }: { deckId: number }) {
       void doc?.loadingTask.destroy();
     };
   }, [deckId]);
+
+  // Apply cloud reveal keys once this book's cards have loaded (maps portable keys -> local ids).
+  useEffect(() => {
+    if (!pendingRevealKeys || !allCards || allCards.length === 0) return;
+    const { keyToId } = cardKeyMaps(cardsByPage);
+    const ids = pendingRevealKeys.map((k) => keyToId.get(k)).filter((x): x is number => x != null);
+    setRevealed(new Set(ids));
+    void updateDeck(deckId, { revealed: ids });
+    setPendingRevealKeys(null);
+  }, [pendingRevealKeys, allCards, cardsByPage, deckId]);
 
   const pageCount = pdf?.pageCount ?? 1;
   const percent = pageCount > 0 ? Math.round(((pageIndex + 1) / pageCount) * 100) : 0;
@@ -231,20 +264,26 @@ export function PageViewer({ deckId }: { deckId: number }) {
     );
     return () => clearTimeout(id);
   }, [revealed, redMode, band, status, deckId]);
-  // Pro cross-device progress: push the device-independent reading state to the cloud (debounced).
+  // Pro cross-device progress: push reading state + revealed (as portable keys) to the cloud
+  // (debounced). Skip while a cloud pull is still pending, so we don't overwrite it with stale local.
   useEffect(() => {
-    if (status !== "ready" || !user || !bookIdRef.current) return;
+    if (status !== "ready" || !user || !bookIdRef.current || pendingRevealKeys) return;
     const id = setTimeout(() => {
+      const { idToKey } = cardKeyMaps(cardsByPage);
+      const revealedKeys = [...revealed]
+        .map((i) => idToKey.get(i))
+        .filter((x): x is string => !!x);
       void updateDeck(deckId, { progressAt: Date.now() });
       void putProgress(bookIdRef.current!, {
         lastPage: pageIndex,
         lastMode: mode,
         redMode,
         sheetBand: band,
+        revealedKeys,
       }).catch(() => {});
     }, 1500);
     return () => clearTimeout(id);
-  }, [pageIndex, mode, redMode, band, status, deckId, user]);
+  }, [pageIndex, mode, redMode, band, revealed, status, deckId, user, pendingRevealKeys, cardsByPage]);
   const exit = () => {
     if (status === "ready") {
       void updateDeck(deckId, {
@@ -254,13 +293,16 @@ export function PageViewer({ deckId }: { deckId: number }) {
         redMode,
         sheetBand: band,
       });
-      if (user && bookIdRef.current)
+      if (user && bookIdRef.current) {
+        const { idToKey } = cardKeyMaps(cardsByPage);
         void putProgress(bookIdRef.current, {
           lastPage: pageIndex,
           lastMode: mode,
           redMode,
           sheetBand: band,
+          revealedKeys: [...revealed].map((i) => idToKey.get(i)).filter((x): x is string => !!x),
         }).catch(() => {});
+      }
     }
     setView({ name: "decks" });
   };
