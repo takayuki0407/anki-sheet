@@ -6,6 +6,7 @@ import { DeckList } from "./components/DeckList";
 import { ImportWizard } from "./components/ImportWizard";
 import { PageViewer } from "./components/PageViewer";
 import { Settings } from "./components/Settings";
+import { Info } from "./components/Info";
 
 export function App() {
   const view = useApp((s) => s.view);
@@ -20,6 +21,9 @@ export function App() {
           Anki-sheet
         </button>
         <span className="brand-sub">赤シート暗記</span>
+        <button className="btn ghost sm topbar-info" onClick={() => setView({ name: "info" })}>
+          情報
+        </button>
       </header>
       <main className="content">
         {view.name === "home" && <Home />}
@@ -27,6 +31,7 @@ export function App() {
         {view.name === "import" && <ImportWizard />}
         {view.name === "viewer" && <PageViewer deckId={view.deckId} />}
         {view.name === "settings" && <Settings deckId={view.deckId} />}
+        {view.name === "info" && <Info />}
       </main>
     </div>
   );

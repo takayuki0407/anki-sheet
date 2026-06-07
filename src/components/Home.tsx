@@ -106,6 +106,17 @@ export function Home() {
       <footer className="home-footer">
         <span>© 2026 Anki-sheet</span>
         <span className="muted">赤シート暗記 — 色付き答えのPDFを、そのまま暗記ツールに</span>
+        <span className="home-footer-links">
+          <button className="link-btn" onClick={() => setView({ name: "info" })}>
+            情報・ヘルプ
+          </button>
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
+            プライバシー
+          </a>
+          <a href="/terms.html" target="_blank" rel="noopener noreferrer">
+            利用規約
+          </a>
+        </span>
       </footer>
     </div>
   );

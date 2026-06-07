@@ -2,7 +2,12 @@ import { useCallback, useRef, useState } from "react";
 import { CancelledError, detectClozesInPdf, type PdfDetectionResult } from "../pdf/pdfEngine";
 import { importDeck } from "../db/repo";
 import { useApp } from "../store/session";
-import { DEFAULT_MAGENTA_BAND } from "../types";
+import {
+  COLOR_PRESETS,
+  DEFAULT_MAGENTA_BAND,
+  type ColorPreset,
+  type DeckColorConfig,
+} from "../types";
 
 type Phase =
   | { k: "idle" }
@@ -31,19 +36,22 @@ export function ImportWizard() {
   const [phase, setPhase] = useState<Phase>({ k: "idle" });
   const [name, setName] = useState("");
   const [copied, setCopied] = useState(false);
+  // Answer color to detect (chosen before / at import, like the iOS version). Kept in a ref so
+  // the async detect closure always reads the latest choice.
+  const [color, setColor] = useState<DeckColorConfig>(DEFAULT_MAGENTA_BAND);
+  const colorRef = useRef(color);
+  colorRef.current = color;
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const handleFile = useCallback(async (file: File) => {
-    setName(file.name.replace(/\.pdf$/i, ""));
-    const blob = file.slice(0, file.size, "application/pdf");
+  const detect = useCallback(async (blob: Blob) => {
     const controller = new AbortController();
     abortRef.current = controller;
     setPhase({ k: "detecting", page: 0, total: 0, found: 0 });
     try {
       const result = await detectClozesInPdf(
         blob,
-        DEFAULT_MAGENTA_BAND,
+        colorRef.current,
         (page, total, found) => setPhase({ k: "detecting", page, total, found }),
         controller.signal,
       );
@@ -55,6 +63,19 @@ export function ImportWizard() {
       abortRef.current = null;
     }
   }, []);
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      setName(file.name.replace(/\.pdf$/i, ""));
+      await detect(file.slice(0, file.size, "application/pdf"));
+    },
+    [detect],
+  );
+
+  const pickPreset = (p: ColorPreset) =>
+    setColor((c) => ({ ...c, hueTarget: p.hueTarget, hueTol: p.hueTol }));
+  const presetActive = (p: ColorPreset) =>
+    color.hueTarget === p.hueTarget && color.hueTol === p.hueTol;
 
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -78,7 +99,7 @@ export function ImportWizard() {
         pageCount: result.pageCount,
         pageW: result.pageW,
         pageH: result.pageH,
-        color: DEFAULT_MAGENTA_BAND,
+        color: colorRef.current,
         clozes: result.clozes,
       });
       // Cover is generated lazily in the bookshelf, so import doesn't load the PDF
@@ -99,26 +120,42 @@ export function ImportWizard() {
       </div>
 
       {phase.k === "idle" && (
-        <div
-          className="dropzone"
-          onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={onDrop}
-        >
-          <p className="dz-big">赤シート対応のPDFをドロップ</p>
-          <p className="dz-sub">またはクリックして選択</p>
-          <p className="dz-note">
-            色付き（マゼンタ／赤）の語句を自動で検出し、暗記カードにします。
-            PDFはこの端末内だけで処理され、アップロードされません。
-          </p>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="application/pdf"
-            hidden
-            onChange={onPick}
-          />
-        </div>
+        <>
+          <div className="import-color">
+            <span className="import-color-label">答えの色（隠したい文字の色）</span>
+            <div className="preset-row">
+              {COLOR_PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  className={`btn sm ${presetActive(p) ? "primary" : ""}`}
+                  onClick={() => pickPreset(p)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div
+            className="dropzone"
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={onDrop}
+          >
+            <p className="dz-big">赤シート対応のPDFをドロップ</p>
+            <p className="dz-sub">またはクリックして選択</p>
+            <p className="dz-note">
+              選んだ色の語句を自動で検出し、暗記カードにします。
+              PDFはこの端末内だけで処理され、アップロードされません。
+            </p>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="application/pdf"
+              hidden
+              onChange={onPick}
+            />
+          </div>
+        </>
       )}
 
       {phase.k === "detecting" && (
@@ -143,6 +180,23 @@ export function ImportWizard() {
             <strong>{phase.result.clozes.length}</strong> 個の語句を検出しました
             （{phase.result.pageCount}ページ）
           </p>
+          <div className="import-color">
+            <span className="import-color-label">検出が合わない時は色を変えて再検出</span>
+            <div className="preset-row">
+              {COLOR_PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  className={`btn sm ${presetActive(p) ? "primary" : ""}`}
+                  onClick={() => pickPreset(p)}
+                >
+                  {p.label}
+                </button>
+              ))}
+              <button className="btn sm" onClick={() => void detect(phase.blob)}>
+                この色で再検出
+              </button>
+            </div>
+          </div>
           <label className="field">
             デッキ名
             <input value={name} onChange={(e) => setName(e.target.value)} />

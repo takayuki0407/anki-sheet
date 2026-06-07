@@ -849,6 +849,109 @@ body {
   margin-top: 12px;
   font-size: 12.5px;
 }
+.home-footer-links {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+}
+.home-footer-links a,
+.link-btn {
+  color: var(--ocean);
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.home-footer-links a:hover,
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+/* topbar 情報 link (pushed to the right) */
+.topbar-info {
+  margin-left: auto;
+}
+
+/* Import color picker */
+.import-color {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.import-color-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Info / help page */
+.info-section {
+  margin-bottom: 4px;
+}
+.info-page .section {
+  margin: 20px 0 10px;
+  font-size: 15px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.info-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.info-card p {
+  margin: 0;
+}
+.info-card .btn {
+  align-self: flex-start;
+}
+.info-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.info-links a {
+  color: var(--ocean);
+  text-decoration: none;
+}
+.info-links a:hover {
+  text-decoration: underline;
+}
+.faq {
+  border-bottom: 1px solid var(--line);
+}
+.faq-q {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 12px 2px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.faq-a {
+  margin: 0 2px 12px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
 
 @media (prefers-color-scheme: dark) {
   :root {

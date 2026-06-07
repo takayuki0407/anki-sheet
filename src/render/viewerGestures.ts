@@ -132,7 +132,10 @@ export function useTouchPan(ref: RefObject<HTMLElement | null>): void {
     let vx = 0;
     let vy = 0;
     let raf = 0;
-    const THRESHOLD = 6; // px before a press becomes a pan (taps still click)
+    // px the finger may travel before a press becomes a pan. Generous so a tap on an answer
+    // mask still reveals it instead of being mistaken for a vertical scroll (a tap that stays
+    // under this still clicks through). Raise further if taps are still read as scrolls.
+    const THRESHOLD = 12;
     const MAX_V = 5; // px/ms velocity cap for the fling
 
     const stopMomentum = () => {
