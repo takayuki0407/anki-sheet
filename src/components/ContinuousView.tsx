@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
 import type { FitMode } from "../render/PageOverlay";
@@ -27,6 +27,10 @@ interface Props {
   onVisiblePage?: (page: number) => void;
   /** Trackpad pinch / ctrl+wheel zoom: receives a multiplicative factor. */
   onPinchZoom?: (factor: number) => void;
+  /** 赤シート mode: render the masks but let the band position (bandTop, in sheet-host px)
+   * decide which are revealed — answers above the band's top edge show, below stay hidden. */
+  manualSheet?: boolean;
+  bandTop?: number;
 }
 
 /**
@@ -53,6 +57,8 @@ export function ContinuousView({
   jumpNonce,
   onVisiblePage,
   onPinchZoom,
+  manualSheet = false,
+  bandTop = 0,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
@@ -123,6 +129,26 @@ export function ContinuousView({
       maxLeft > 0 ? Math.min(maxLeft, Math.max(0, a.hCenter * el.scrollWidth - el.clientWidth / 2)) : 0;
   }, [cssW]);
 
+  // 赤シート: reveal answers above the band's top edge, cover those below — like sliding a
+  // physical sheet. Only the red masks change; the black body text is never touched. The masks
+  // are React-rendered as covered; this toggles an extra .sheet-reveal class imperatively (cheap:
+  // only the handful of virtualized, on-screen masks exist in the DOM at once).
+  const gateMasks = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !manualSheet) return;
+    const line = el.getBoundingClientRect().top + bandTop; // band's top edge in viewport coords
+    el.querySelectorAll<HTMLElement>(".mask").forEach((m) => {
+      const r = m.getBoundingClientRect();
+      m.classList.toggle("sheet-reveal", r.top + r.height / 2 < line);
+    });
+  }, [manualSheet, bandTop]);
+  // Re-gate when the band moves, on zoom/reflow, and when entering sheet mode (after layout).
+  useEffect(() => {
+    if (!manualSheet) return;
+    const id = requestAnimationFrame(gateMasks);
+    return () => cancelAnimationFrame(id);
+  }, [gateMasks, cssW, manualSheet, bandTop]);
+
   const onScroll = () => {
     if (ticking.current || !cssW) return;
     ticking.current = true;
@@ -130,6 +156,7 @@ export function ContinuousView({
       ticking.current = false;
       const el = scrollRef.current;
       if (!el) return;
+      gateMasks(); // scrolling past the sheet edge reveals answers (also re-gates new slots)
       const pitch = (cssW * pageH) / pageW + 12; // slot height + margin
       const rel = el.scrollTop - 8;
       const exact = pitch > 0 ? rel / pitch : 0;
@@ -150,7 +177,11 @@ export function ContinuousView({
   };
 
   return (
-    <div className="continuous-scroll" ref={scrollRef} onScroll={onScroll}>
+    <div
+      className={manualSheet ? "continuous-scroll manual" : "continuous-scroll"}
+      ref={scrollRef}
+      onScroll={onScroll}
+    >
       {cssW > 0 &&
         Array.from({ length: pageCount }, (_, i) => (
           <PageSlot
@@ -162,6 +193,7 @@ export function ContinuousView({
             pageH={pageH}
             cards={cardsByPage.get(i) ?? []}
             sheetOn={sheetOn}
+            manualSheet={manualSheet}
             revealed={revealed}
             onToggle={onToggle}
             rootRef={scrollRef}
@@ -179,6 +211,7 @@ interface SlotProps {
   pageH: number;
   cards: CardRow[];
   sheetOn: boolean;
+  manualSheet: boolean;
   revealed: ReadonlySet<number>;
   onToggle: (id: number) => void;
   rootRef: React.RefObject<HTMLDivElement | null>;
@@ -192,6 +225,7 @@ function PageSlot({
   pageH,
   cards,
   sheetOn,
+  manualSheet,
   revealed,
   onToggle,
   rootRef,
@@ -256,12 +290,14 @@ function PageSlot({
     <div className="page-slot" ref={slotRef} data-page={pageIndex} style={{ width: cssW, height }}>
       <canvas ref={canvasRef} className="page-canvas" />
       {active &&
-        sheetOn &&
+        (sheetOn || manualSheet) &&
         fitScale > 0 &&
         cards.flatMap((c) => {
           const rects = c.rects.length ? c.rects : [c.answerRect];
-          // The whole answer (card) reveals together — wrapped answers stay one card.
-          const isRevealed = revealed.has(c.id!);
+          // The whole answer (card) reveals together — wrapped answers stay one card. In 赤シート
+          // mode the band position (not a tap) reveals masks, so render them all covered and let
+          // ContinuousView's gateMasks toggle .sheet-reveal; taps are ignored (CSS pointer-events).
+          const isRevealed = !manualSheet && revealed.has(c.id!);
           return rects.map((r, i) => {
             const h = r.h * fitScale;
             return (
@@ -278,7 +314,7 @@ function PageSlot({
                     "--tap-pad": `${Math.max(4, h * 0.3)}px`,
                   } as CSSProperties
                 }
-                onClick={() => onToggle(c.id!)}
+                onClick={manualSheet ? undefined : () => onToggle(c.id!)}
               />
             );
           });

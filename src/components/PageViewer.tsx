@@ -34,9 +34,11 @@ interface Band {
 type RedMode = "mask" | "sheet" | "off";
 
 /**
- * Manual red sheet (縦読み only): a draggable / resizable translucent red band you slide over
- * the page like a physical red sheet. multiply blend keeps black text readable while red /
- * magenta answers vanish under it. Drag the body to move; drag the bottom grip to resize.
+ * Manual red sheet (縦読み only): a draggable red band you slide over the page like a physical
+ * red sheet. The band is just a faint tint (black body text stays crisp); the detection masks do
+ * the hiding, gated by the band's position (ContinuousView.gateMasks) — answers above the top
+ * edge are revealed, below stay hidden. Only the top grip drags (the bottom is pinned); the body
+ * is pointer-events:none so the page scrolls through it.
  */
 function RedSheet({
   band,
@@ -374,6 +376,8 @@ export function PageViewer({ deckId }: { deckId: number }) {
             jumpNonce={jumpNonce}
             onVisiblePage={setPageIndex}
             onPinchZoom={onPinchZoom}
+            manualSheet={redMode === "sheet"}
+            bandTop={band.top}
           />
           {redMode === "sheet" && <RedSheet band={band} onChange={setBand} hostRef={sheetHostRef} />}
         </div>
