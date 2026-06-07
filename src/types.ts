@@ -54,6 +54,8 @@ export interface DeckRow {
   color: DeckColorConfig;
   /** Stable cross-device id for the account-global sync registry (server counter). */
   bookId?: string;
+  /** Pinned to the top of the bookshelf when true. */
+  favorite?: boolean;
   /** Last-read page (0-based) so the book reopens where you left off. */
   lastPage?: number;
   /** Last reading mode ("scroll" = 縦読み / "paged" = 横読み). Default 縦読み. */

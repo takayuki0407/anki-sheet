@@ -153,6 +153,7 @@ body {
   align-items: start;
 }
 .book {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -769,6 +770,48 @@ body {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 14px;
+  align-items: center;
+}
+/* Bookshelf sort control + favorite star */
+.sort-control {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sort-control select {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+}
+.fav-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  border: none;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: var(--shadow);
+  color: #cbb893;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.fav-btn.on {
+  color: var(--sand);
 }
 
 /* Brand in the topbar doubles as a "home" link. */

@@ -7,6 +7,7 @@ import {
   getDeckPdf,
   listDecks,
   setCover,
+  updateDeck,
 } from "../db/repo";
 import { renderCover } from "../pdf/pdfEngine";
 import { downloadBlob, exportBackup, importBackup } from "../db/backup";
@@ -20,6 +21,28 @@ function dateStamp(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+}
+
+interface DeckVM {
+  deck: DeckRow;
+  count: number;
+}
+type SortMode = "new" | "name" | "answers";
+const SORT_LABELS: Record<SortMode, string> = {
+  new: "新しい順",
+  name: "名前順",
+  answers: "暗記数順",
+};
+
+/** Favorites pinned to the top, then ordered by the chosen mode. */
+function sortVms(vms: DeckVM[], mode: SortMode): DeckVM[] {
+  return [...vms].sort((a, b) => {
+    const fav = (b.deck.favorite ? 1 : 0) - (a.deck.favorite ? 1 : 0);
+    if (fav !== 0) return fav;
+    if (mode === "name") return a.deck.name.localeCompare(b.deck.name, "ja");
+    if (mode === "answers") return b.count - a.count;
+    return b.deck.createdAt - a.deck.createdAt;
+  });
 }
 
 // Serialize cover generation so visiting the shelf doesn't parse every PDF at once.
@@ -73,7 +96,18 @@ function useCover(deckId: number): string | null {
 
 export function DeckList() {
   const setView = useApp((s) => s.setView);
-  const decks = useLiveQuery(() => listDecks(), []);
+  const vms = useLiveQuery(
+    async () =>
+      Promise.all(
+        (await listDecks()).map(async (deck) => ({ deck, count: await answerCount(deck.id!) })),
+      ),
+    [],
+  );
+  const decks = vms?.map((v) => v.deck);
+  const [sort, setSort] = useState<SortMode>(
+    () => (localStorage.getItem("shelfSort") as SortMode) || "new",
+  );
+  const sorted = vms ? sortVms(vms, sort) : undefined;
   const importRef = useRef<HTMLInputElement>(null);
   const user = useAuth((s) => s.user);
 
@@ -130,6 +164,23 @@ export function DeckList() {
           バックアップを読み込む
         </button>
         <input ref={importRef} type="file" accept="application/json" hidden onChange={onImportFile} />
+        <label className="sort-control">
+          並び替え
+          <select
+            value={sort}
+            onChange={(e) => {
+              const v = e.target.value as SortMode;
+              setSort(v);
+              localStorage.setItem("shelfSort", v);
+            }}
+          >
+            {(["new", "name", "answers"] as SortMode[]).map((m) => (
+              <option key={m} value={m}>
+                {SORT_LABELS[m]}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {decks === undefined && <p className="muted">読み込み中…</p>}
@@ -140,11 +191,11 @@ export function DeckList() {
         </div>
       )}
 
-      {decks && decks.length > 0 && (
+      {sorted && sorted.length > 0 && (
         <div className="bookshelf">
           <div className="book-grid">
-            {decks.map((d) => (
-              <DeckBook key={d.id} deck={d} />
+            {sorted.map((v) => (
+              <DeckBook key={v.deck.id} deck={v.deck} count={v.count} />
             ))}
           </div>
         </div>
@@ -190,16 +241,19 @@ function CloudBook({ book }: { book: AccountBook }) {
   );
 }
 
-function DeckBook({ deck }: { deck: DeckRow }) {
+function DeckBook({ deck, count }: { deck: DeckRow; count: number }) {
   const setView = useApp((s) => s.setView);
   const cover = useCover(deck.id!);
-  const count = useLiveQuery(() => answerCount(deck.id!), [deck.id]);
 
   const onDelete = async () => {
     if (!confirm(`「${deck.name}」を削除しますか？`)) return;
     await deleteDeck(deck.id!);
     // Free the account-global slot (best-effort; ignore when offline / signed out).
     if (deck.bookId && useAuth.getState().user) void unregisterBook(deck.bookId).catch(() => {});
+  };
+  const toggleFav = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    void updateDeck(deck.id!, { favorite: !deck.favorite });
   };
 
   return (
@@ -215,10 +269,18 @@ function DeckBook({ deck }: { deck: DeckRow }) {
           <span className="cover-fallback">{deck.name}</span>
         )}
       </button>
+      <button
+        className={`fav-btn ${deck.favorite ? "on" : ""}`}
+        onClick={toggleFav}
+        title={deck.favorite ? "お気に入りを解除" : "お気に入りに追加"}
+        aria-label="お気に入り"
+      >
+        {deck.favorite ? "★" : "☆"}
+      </button>
       <div className="book-title" title={deck.name}>
         {deck.name}
       </div>
-      <div className="book-meta">{count ?? "…"} 個の暗記</div>
+      <div className="book-meta">{count} 個の暗記</div>
       <div className="book-actions">
         <button
           className="btn ghost sm"
