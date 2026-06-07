@@ -124,12 +124,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [zoom, setZoom] = useState(1);
   const [zoomEdit, setZoomEdit] = useState<string | null>(null); // raw text while typing %
-  // Touch devices (iPhone/iPad) default to fit-to-width so the page fills the
-  // screen horizontally and you scroll down — like the Kindle app. Desktop keeps
-  // whole-page view. (The 幅に合わせる / 全体表示 button still toggles either way.)
-  const [fitMode, setFitMode] = useState<FitMode>(() =>
-    typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches ? "width" : "page",
-  );
+  // Always fit-to-width: the page fills the screen horizontally and you scroll down (like the
+  // Kindle app); users change the magnification with the ± / % controls. (The 全体表示 toggle
+  // was removed.)
+  const fitMode: FitMode = "width";
   const [mode, setMode] = useState<Mode>("scroll"); // 縦読み by default
   const [jumpNonce, setJumpNonce] = useState(0);
   const [tocOpen, setTocOpen] = useState(false);
@@ -509,12 +507,6 @@ export function PageViewer({ deckId }: { deckId: number }) {
           onClick={() => setMode((m) => (m === "paged" ? "scroll" : "paged"))}
         >
           {mode === "paged" ? "縦読み" : "横読み"}
-        </button>
-        <button
-          className="btn ghost sm"
-          onClick={() => setFitMode((m) => (m === "page" ? "width" : "page"))}
-        >
-          {fitMode === "page" ? "幅に合わせる" : "全体表示"}
         </button>
         {fullscreenSupported && (
           <button className="btn ghost sm" onClick={toggleFullscreen}>
