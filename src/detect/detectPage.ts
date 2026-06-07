@@ -1,5 +1,5 @@
-import type { DeckColorConfig, DetectedCloze, Rect } from "../types";
-import { sampleBox, type PagePixels } from "./pixelSampler";
+import { DETECT_SCALE, type DeckColorConfig, type DetectedCloze, type Rect } from "../types";
+import { sampleSegments, type PagePixels } from "./pixelSampler";
 
 /** A text run with the device-space box to sample (computed from a pdf.js item). */
 export interface RunCandidate {
@@ -37,8 +37,9 @@ export function plausibleContinuation(prev: Rect, next: Rect): boolean {
   const h = Math.max(prev.h, next.h);
   const dy = yc(next) - yc(prev);
   if (Math.abs(dy) <= 0.6 * h) {
-    // same line: next is to the right (or slightly overlapping)
-    return next.x + next.w >= prev.x - 0.3 * h;
+    // same line: merge only if (nearly) adjacent — a real black-text gap separates answers
+    const gap = next.x - (prev.x + prev.w);
+    return gap <= 0.3 * h && next.x + next.w >= prev.x - 0.3 * h;
   }
   if (dy > 0 && dy <= 2.4 * h) {
     if (next.x <= prev.x) return true; // horizontal wrap to a new line
@@ -83,25 +84,32 @@ export function detectPage(
   scale: number,
 ): DetectedCloze[] {
   const answers: Answer[] = [];
+  // In-band pixel counts scale with render scale²; rescale the floor so detection at the
+  // mobile render scale (1.5x) matches the desktop DETECT_SCALE (2x) calibration.
+  const minBand = cfg.minBandPx * (scale / DETECT_SCALE) ** 2;
   let cur: Answer | null = null;
 
   for (const run of runs) {
     if (!run.str || !run.str.trim()) continue; // skip whitespace-only runs
-    const s = sampleBox(pixels, run.deviceBox, cfg);
-    const colored =
-      !!s.tightDeviceRect && s.bandPx >= cfg.minBandPx && s.bandPx >= s.inkPx * cfg.inkRatioFloor;
+    const s = sampleSegments(pixels, run.deviceBox, cfg);
+    // Segmentation isolates the colored pixels per span, so the run-level ink-ratio gate
+    // (which dropped a small red phrase inside a mostly-black run) is no longer needed.
+    const colored = s.segments.length > 0 && s.bandPx >= minBand;
 
     if (colored) {
-      const rect = deviceToPage(s.tightDeviceRect!, scale);
-      if (cur && plausibleContinuation(cur.rects[cur.rects.length - 1], rect)) {
-        cur.rects.push(rect);
-        cur.text += run.str;
-      } else {
-        if (cur) answers.push(cur);
-        cur = { rects: [rect], text: run.str };
+      // Each colored span is its own piece; spans within a run are split by black text, so
+      // they become distinct answers and the black between them is NOT masked.
+      for (const seg of s.segments) {
+        const rect = deviceToPage(seg, scale);
+        if (cur && plausibleContinuation(cur.rects[cur.rects.length - 1], rect)) {
+          cur.rects.push(rect);
+        } else {
+          if (cur) answers.push(cur);
+          cur = { rects: [rect], text: run.str };
+        }
       }
     } else if (s.inkPx >= 3) {
-      // Real (black) ink between colored runs ends the current answer.
+      // Real (black) ink with no colored span ends the current answer.
       if (cur) {
         answers.push(cur);
         cur = null;
