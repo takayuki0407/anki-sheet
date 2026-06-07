@@ -494,7 +494,6 @@ body {
   bottom: 0; /* the bottom edge stays at the viewport bottom; only the top edge moves */
   z-index: 6;
   background: rgba(200, 60, 60, 0.14); /* faint warm tint — black stays crisp */
-  box-shadow: inset 0 2px 0 rgba(190, 24, 60, 0.55); /* a line marking the top edge */
   pointer-events: none; /* scroll / swipe the page through the sheet */
 }
 /* 赤シート mode: masks stay visible (the band position reveals them) but don't intercept pointer
@@ -510,24 +509,29 @@ body {
   background: transparent;
   box-shadow: none;
 }
-/* Two slim grab handles at the LEFT and RIGHT ends of the top edge (not the centre, which
-   covered the text being read). Both drag the top edge. Kept short so they don't obscure. */
+/* A small, semi-transparent handle centred on the top edge. The element is a larger transparent
+   hit target; the visible bar (::before) is small so it barely obscures the text. */
 .red-sheet-grip {
   position: absolute;
-  width: 84px;
-  height: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 20px;
   z-index: 7;
-  border-radius: 6px;
-  background: #d24b4b;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  background: transparent;
   cursor: ns-resize;
   touch-action: none;
 }
-.red-sheet-grip.left {
-  left: 12px;
-}
-.red-sheet-grip.right {
-  right: 12px;
+.red-sheet-grip::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(214, 88, 88, 0.5);
 }
 
 /* Settings / tuner */
