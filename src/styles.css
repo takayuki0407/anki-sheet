@@ -458,6 +458,21 @@ body {
   border-radius: 2px;
   pointer-events: none;
 }
+/* Touch: enlarge the answer mask / reveal-zone TAP target vertically with a transparent
+   pseudo-element, so a thin one-line mask is easy to tap (clicks on ::after count as clicks
+   on the parent). The visible red mask stays tight — it must not cover neighbouring lines.
+   Mouse/pen are precise, so this is touch-only. Raise the inset if taps still miss. */
+@media (pointer: coarse) {
+  .mask::after,
+  .reveal-zone::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -8px;
+    bottom: -8px;
+  }
+}
 
 /* Settings / tuner */
 .settings .section {
