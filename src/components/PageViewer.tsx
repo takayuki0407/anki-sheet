@@ -8,13 +8,14 @@ import {
   getDeck,
   getDeckPdf,
   listBookmarks,
+  renameBookmark,
   updateDeck,
 } from "../db/repo";
 import { loadPdf } from "../pdf/pdfEngine";
 import { PageOverlay, type FitMode, type MaskGroup } from "../render/PageOverlay";
 import { ContinuousView } from "./ContinuousView";
 import { useApp } from "../store/session";
-import type { CardRow, PdfRow } from "../types";
+import type { BookmarkRow, CardRow, PdfRow } from "../types";
 
 type Status = "loading" | "ready" | "error";
 type Mode = "paged" | "scroll";
@@ -216,6 +217,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
     const title = window.prompt("しおりの名前（章・節など）", `${pageIndex + 1}ページ`);
     if (title && title.trim()) await addBookmark(deckId, pageIndex, title.trim());
   };
+  const renameBookmarkAt = async (b: BookmarkRow) => {
+    const title = window.prompt("しおりの名前", b.title);
+    if (title && title.trim()) await renameBookmark(b.id!, title.trim());
+  };
 
   const ready = doc && docReady && pdf;
 
@@ -308,6 +313,14 @@ export function PageViewer({ deckId }: { deckId: number }) {
         </button>
         <button
           className="btn ghost sm"
+          onClick={() => setZoom(1)}
+          disabled={Math.abs(zoom - 1) < 1e-3}
+          title="100% に戻す"
+        >
+          100%
+        </button>
+        <button
+          className="btn ghost sm"
           onClick={() => setMode((m) => (m === "paged" ? "scroll" : "paged"))}
         >
           {mode === "paged" ? "縦読み" : "横読み"}
@@ -389,7 +402,18 @@ export function PageViewer({ deckId }: { deckId: number }) {
                     <span className="toc-title">{b.title}</span>
                     <span className="toc-page">p.{b.pageIndex + 1}</span>
                   </button>
-                  <button className="btn ghost sm" onClick={() => deleteBookmark(b.id!)}>
+                  <button
+                    className="btn ghost sm"
+                    onClick={() => renameBookmarkAt(b)}
+                    aria-label="名前を変更"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="btn ghost sm"
+                    onClick={() => deleteBookmark(b.id!)}
+                    aria-label="削除"
+                  >
                     ×
                   </button>
                 </li>
