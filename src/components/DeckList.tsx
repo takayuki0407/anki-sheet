@@ -12,7 +12,8 @@ import { renderCover } from "../pdf/pdfEngine";
 import { downloadBlob, exportBackup, importBackup } from "../db/backup";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
-import { unregisterBook } from "../sync/api";
+import { listBooks, unregisterBook, type AccountBook } from "../sync/api";
+import { downloadDeck } from "../sync/deck";
 import type { DeckRow } from "../types";
 
 function dateStamp(): string {
@@ -74,6 +75,25 @@ export function DeckList() {
   const setView = useApp((s) => s.setView);
   const decks = useLiveQuery(() => listDecks(), []);
   const importRef = useRef<HTMLInputElement>(null);
+  const user = useAuth((s) => s.user);
+
+  // Books in the account that aren't on THIS device yet → offer a one-tap cloud download (Pro).
+  const [cloud, setCloud] = useState<AccountBook[] | null>(null);
+  useEffect(() => {
+    if (!user) {
+      setCloud(null);
+      return;
+    }
+    let live = true;
+    void listBooks()
+      .then((u) => live && setCloud(u.books))
+      .catch(() => live && setCloud(null));
+    return () => {
+      live = false;
+    };
+  }, [user]);
+  const localIds = new Set(((decks ?? []).map((d) => d.bookId).filter(Boolean) as string[]));
+  const remote = (cloud ?? []).filter((b) => !localIds.has(b.book_id));
 
   const onExport = async () => {
     const blob = await exportBackup();
@@ -129,7 +149,44 @@ export function DeckList() {
           </div>
         </div>
       )}
+
+      {remote.length > 0 && (
+        <div className="cloud-section">
+          <h3 className="section">クラウド（他の端末の本）</h3>
+          <p className="muted small">同じアカウントで取り込んだ本です。タップでこの端末に取り込めます。</p>
+          <ul className="cloud-list">
+            {remote.map((b) => (
+              <CloudBook key={b.book_id} book={b} />
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** A book that exists in the account but not on this device — one tap downloads + rebuilds it. */
+function CloudBook({ book }: { book: AccountBook }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(false);
+  const download = async () => {
+    setBusy(true);
+    setErr(false);
+    try {
+      await downloadDeck(book); // on success the local deck appears (live query) → this row unmounts
+    } catch {
+      setErr(true);
+      setBusy(false);
+    }
+  };
+  return (
+    <li className="cloud-item">
+      <span className="cloud-name">{book.name || "（無題）"}</span>
+      <span className="cloud-device">{book.device ?? ""}</span>
+      <button className="btn sm" onClick={download} disabled={busy}>
+        {busy ? "取り込み中…" : err ? "再試行" : "この端末に取り込む"}
+      </button>
+    </li>
   );
 }
 

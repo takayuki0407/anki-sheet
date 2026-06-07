@@ -4,6 +4,7 @@ import { importBookmarks, importDeck } from "../db/repo";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
 import { registerBook } from "../sync/api";
+import { uploadDeck } from "../sync/deck";
 import { BookLimitDialog, type PendingImport } from "./BookLimitDialog";
 import {
   COLOR_PRESETS,
@@ -121,6 +122,8 @@ export function ImportWizard() {
         clozes: p.result.clozes,
       });
       if (p.result.outline.length) await importBookmarks(deckId, p.result.outline);
+      // Pro cloud sync: upload the PDF + content in the background (best-effort; 403 on standard).
+      if (useAuth.getState().user) void uploadDeck(p.bookId, deckId).catch(() => {});
       setView({ name: "decks" });
     },
     [setView],

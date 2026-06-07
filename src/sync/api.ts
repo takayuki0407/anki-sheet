@@ -9,9 +9,10 @@ const BASE = "/api/sync";
 async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = await getIdToken();
   if (!token) throw new Error("not_signed_in");
+  // Default to JSON, but let callers override Content-Type (e.g. the binary PDF upload).
   return fetch(`${BASE}${path}`, {
     ...init,
-    headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
   });
 }
 
@@ -67,5 +68,40 @@ export interface AccountBooks {
 export async function listBooks(): Promise<AccountBooks> {
   const res = await authedFetch("/books");
   if (!res.ok) throw new Error(`list failed: ${res.status}`);
+  return res.json();
+}
+
+// ---- Pro cloud sync of the PDF blob + deck content (R2) ----
+
+/** Upload the PDF (Pro). 403 (standard tier) is a silent no-op. */
+export async function putBlob(bookId: string, blob: Blob): Promise<void> {
+  const res = await authedFetch(`/books/${encodeURIComponent(bookId)}/blob`, {
+    method: "PUT",
+    body: blob,
+    headers: { "Content-Type": "application/pdf" },
+  });
+  if (res.status === 403) return;
+  if (!res.ok) throw new Error(`putBlob failed: ${res.status}`);
+}
+
+export async function getBlob(bookId: string): Promise<Blob> {
+  const res = await authedFetch(`/books/${encodeURIComponent(bookId)}/blob`);
+  if (!res.ok) throw new Error(`getBlob failed: ${res.status}`);
+  return res.blob();
+}
+
+/** Upload deck content JSON (name/color/geometry/clozes/bookmarks) (Pro). 403 is a silent no-op. */
+export async function putContent(bookId: string, json: string): Promise<void> {
+  const res = await authedFetch(`/books/${encodeURIComponent(bookId)}/content`, {
+    method: "PUT",
+    body: json,
+  });
+  if (res.status === 403) return;
+  if (!res.ok) throw new Error(`putContent failed: ${res.status}`);
+}
+
+export async function getContent(bookId: string): Promise<unknown> {
+  const res = await authedFetch(`/books/${encodeURIComponent(bookId)}/content`);
+  if (!res.ok) throw new Error(`getContent failed: ${res.status}`);
   return res.json();
 }

@@ -1055,6 +1055,40 @@ body {
   white-space: nowrap;
 }
 
+/* Bookshelf "cloud" section: account books not on this device */
+.cloud-section {
+  margin-top: 20px;
+}
+.cloud-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cloud-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+.cloud-name {
+  flex: 1;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-device {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 /* Import color picker */
 .import-color {
   display: flex;
