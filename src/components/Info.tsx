@@ -160,8 +160,6 @@ export function Info() {
                   </p>
                   <ul>
                     <li>本を10冊まで取り込み</li>
-                    <li>全端末で冊数を管理</li>
-                    <li className="muted">クラウド同期なし</li>
                   </ul>
                 </div>
                 <div className={`plan-col pro ${usage?.tier === "pro" ? "current" : ""}`}>
@@ -173,8 +171,8 @@ export function Info() {
                   </p>
                   <ul>
                     <li>本を無制限に取り込み</li>
-                    <li>クラウド保存 5GB</li>
-                    <li>端末・プラットフォーム間で同期</li>
+                    <li>クラウドストレージ 5GB</li>
+                    <li>全ての端末・プラットフォームで進捗同期</li>
                   </ul>
                 </div>
               </div>
