@@ -26,6 +26,69 @@ const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.1;
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(z * 100) / 100));
 
+interface Band {
+  top: number;
+  height: number;
+}
+
+/**
+ * Manual red sheet (縦読み only): a draggable / resizable translucent red band you slide over
+ * the page like a physical red sheet. multiply blend keeps black text readable while red /
+ * magenta answers vanish under it. Drag the body to move; drag the bottom grip to resize.
+ */
+function RedSheet({
+  band,
+  onChange,
+  hostRef,
+}: {
+  band: Band;
+  onChange: (b: Band) => void;
+  hostRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const drag = useRef<{ mode: "move" | "resize"; y: number; top: number; h: number } | null>(null);
+  const begin = (mode: "move" | "resize") => (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    drag.current = { mode, y: e.clientY, top: band.top, h: band.height };
+  };
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const hh = hostRef.current?.clientHeight ?? 0;
+    const dy = e.clientY - d.y;
+    if (d.mode === "move") {
+      onChange({ top: Math.max(0, Math.min(Math.max(0, hh - band.height), d.top + dy)), height: band.height });
+    } else {
+      onChange({ top: band.top, height: Math.max(28, Math.min(hh - band.top, d.h + dy)) });
+    }
+  };
+  const end = (e: React.PointerEvent) => {
+    drag.current = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  };
+  return (
+    <>
+      <div
+        className="red-sheet"
+        style={{ top: band.top, height: band.height }}
+        onPointerDown={begin("move")}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
+      />
+      <div
+        className="red-sheet-grip"
+        style={{ top: band.top + band.height - 11 }}
+        onPointerDown={begin("resize")}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
+      />
+    </>
+  );
+}
+
 /** Standalone digital red sheet: page through (or scroll) a PDF, hide/show answers. */
 export function PageViewer({ deckId }: { deckId: number }) {
   const setView = useApp((s) => s.setView);
@@ -51,6 +114,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [tocOpen, setTocOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const viewerRef = useRef<HTMLDivElement>(null);
+  // Manual red sheet (縦読み only) — a draggable / resizable translucent red band.
+  const [manualSheet, setManualSheet] = useState(false);
+  const [band, setBand] = useState<Band>({ top: 60, height: 150 });
+  const sheetHostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -279,22 +346,25 @@ export function PageViewer({ deckId }: { deckId: number }) {
         />
       )}
       {ready && mode === "scroll" && (
-        <ContinuousView
-          doc={doc}
-          pageCount={pageCount}
-          pageW={pdf.pageW}
-          pageH={pdf.pageH}
-          cardsByPage={cardsByPage}
-          sheetOn={sheetOn}
-          revealed={revealed}
-          onToggle={toggle}
-          zoom={zoom}
-          fitMode={fitMode}
-          jumpTo={pageIndex}
-          jumpNonce={jumpNonce}
-          onVisiblePage={setPageIndex}
-          onPinchZoom={onPinchZoom}
-        />
+        <div className="sheet-host" ref={sheetHostRef}>
+          <ContinuousView
+            doc={doc}
+            pageCount={pageCount}
+            pageW={pdf.pageW}
+            pageH={pdf.pageH}
+            cardsByPage={cardsByPage}
+            sheetOn={sheetOn}
+            revealed={revealed}
+            onToggle={toggle}
+            zoom={zoom}
+            fitMode={fitMode}
+            jumpTo={pageIndex}
+            jumpNonce={jumpNonce}
+            onVisiblePage={setPageIndex}
+            onPinchZoom={onPinchZoom}
+          />
+          {manualSheet && <RedSheet band={band} onChange={setBand} hostRef={sheetHostRef} />}
+        </div>
       )}
 
       <div className="viewer-controls">
@@ -346,6 +416,15 @@ export function PageViewer({ deckId }: { deckId: number }) {
         >
           {fitMode === "page" ? "幅に合わせる" : "全体表示"}
         </button>
+        {mode === "scroll" && (
+          <button
+            className={`btn sm ${manualSheet ? "primary" : "ghost"}`}
+            onClick={() => setManualSheet((v) => !v)}
+            title="任意の位置に動かせる赤シートを重ねる"
+          >
+            重ねシート
+          </button>
+        )}
         {fullscreenSupported && (
           <button className="btn ghost sm" onClick={toggleFullscreen}>
             {isFullscreen ? "⤢ 解除" : "⛶ 全画面"}
