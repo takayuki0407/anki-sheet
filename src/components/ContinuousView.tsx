@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
 import type { FitMode } from "../render/PageOverlay";
@@ -261,19 +261,26 @@ function PageSlot({
         cards.flatMap((c) => {
           const rects = c.rects.length ? c.rects : [c.answerRect];
           const isRevealed = revealed.has(c.id!);
-          return rects.map((r, i) => (
-            <div
-              key={`${c.id}:${i}`}
-              className={isRevealed ? "reveal-zone" : "mask"}
-              style={{
-                left: r.x * fitScale,
-                top: r.y * fitScale,
-                width: r.w * fitScale,
-                height: r.h * fitScale,
-              }}
-              onClick={() => onToggle(c.id!)}
-            />
-          ));
+          return rects.map((r, i) => {
+            const h = r.h * fitScale;
+            return (
+              <div
+                key={`${c.id}:${i}`}
+                className={isRevealed ? "reveal-zone" : "mask"}
+                style={
+                  {
+                    left: r.x * fitScale,
+                    top: r.y * fitScale,
+                    width: r.w * fitScale,
+                    height: h,
+                    // Vertical tap-target padding, generous + scaled to the line height.
+                    "--tap-pad": `${Math.max(18, h * 0.9)}px`,
+                  } as CSSProperties
+                }
+                onClick={() => onToggle(c.id!)}
+              />
+            );
+          });
         })}
     </div>
   );

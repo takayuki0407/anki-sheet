@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
 import { useDragPan, useTouchPan, useWheelZoom } from "./viewerGestures";
@@ -166,22 +166,29 @@ export function PageOverlay({
           groups.map((g) => {
             const revealed = revealedIds.has(g.id);
             // Both states stay clickable so a revealed answer can be hidden again.
-            return g.rects.map((r, i) => (
-              <div
-                key={`${g.id}:${i}`}
-                className={revealed ? "reveal-zone" : "mask"}
-                style={{
-                  left: r.x * fitScale,
-                  top: r.y * fitScale,
-                  width: r.w * fitScale,
-                  height: r.h * fitScale,
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggle?.(g.id);
-                }}
-              />
-            ));
+            return g.rects.map((r, i) => {
+              const h = r.h * fitScale;
+              return (
+                <div
+                  key={`${g.id}:${i}`}
+                  className={revealed ? "reveal-zone" : "mask"}
+                  style={
+                    {
+                      left: r.x * fitScale,
+                      top: r.y * fitScale,
+                      width: r.w * fitScale,
+                      height: h,
+                      // Vertical tap-target padding, generous + scaled to the line height.
+                      "--tap-pad": `${Math.max(18, h * 0.9)}px`,
+                    } as CSSProperties
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggle?.(g.id);
+                  }}
+                />
+              );
+            });
           })}
         {fitScale > 0 &&
           highlightRects?.map((r, i) => (
