@@ -44,7 +44,7 @@ body {
 }
 .topbar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
@@ -55,8 +55,15 @@ body {
 }
 .brand {
   font-weight: 800;
+  font-size: 18px;
   color: var(--sand-deep);
   letter-spacing: 0.02em;
+}
+/* The app icon shown to the left of the "Anki-sheet" wordmark (nav + app topbar). */
+.brand-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
 }
 .brand-sub {
   font-size: 12px;
@@ -771,6 +778,9 @@ body {
   border: none;
   padding: 0;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ---- Marketing landing (Home) ---- */
@@ -1342,6 +1352,9 @@ body {
   color: var(--sand-deep);
   cursor: pointer;
   padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .mkt-links {
   display: flex;

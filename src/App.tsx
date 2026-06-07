@@ -33,6 +33,7 @@ export function App() {
       ) : (
         <header className="topbar">
           <button className="brand brand-btn" onClick={() => setView({ name: "home" })}>
+            <img src="/icon.svg" className="brand-icon" alt="" />
             Anki-sheet
           </button>
           <span className="brand-sub">赤シート暗記</span>

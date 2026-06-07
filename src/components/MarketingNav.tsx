@@ -15,6 +15,7 @@ export function MarketingNav({ current }: { current: View["name"] }) {
   return (
     <header className="mkt-nav">
       <button className="mkt-brand" onClick={() => setView({ name: "home" })}>
+        <img src="/icon.svg" className="brand-icon" alt="" />
         Anki-sheet
       </button>
       <nav className="mkt-links">
