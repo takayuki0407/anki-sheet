@@ -773,7 +773,8 @@ body {
 
 /* Brand in the topbar doubles as a "home" link. */
 .brand-btn {
-  font: inherit;
+  /* No `font: inherit` here — that shorthand reset the weight/size set by .brand (so the wordmark
+     rendered in a normal weight, unlike the landing nav). Let .brand control weight/size. */
   background: none;
   border: none;
   padding: 0;
