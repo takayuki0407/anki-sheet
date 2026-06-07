@@ -37,7 +37,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [docReady, setDocReady] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [sheetOn, setSheetOn] = useState(true);
-  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [zoom, setZoom] = useState(1);
   const [zoomEdit, setZoomEdit] = useState<string | null>(null); // raw text while typing %
   // Touch devices (iPhone/iPad) default to fit-to-width so the page fills the
@@ -169,11 +169,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
     if (!Number.isNaN(v)) setZoom(clampZoom(v / 100));
     setZoomEdit(null);
   };
-  const toggle = (key: string) =>
+  const toggle = (id: number) =>
     setRevealed((s) => {
       const n = new Set(s);
-      if (n.has(key)) n.delete(key);
-      else n.add(key);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
 
@@ -270,7 +270,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
           pageH={pdf.pageH}
           groups={groups}
           revealedIds={revealed}
-          onToggle={toggle}
+          onToggle={(id) => toggle(id as number)}
           fitMode={fitMode}
           zoom={zoom}
           onTapZone={(dir) => goTo(pageIndex + dir)}

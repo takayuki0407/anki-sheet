@@ -11,7 +11,7 @@ export interface MaskGroup {
 
 export type FitMode = "page" | "width";
 
-const EMPTY: ReadonlySet<string> = new Set();
+const EMPTY: ReadonlySet<string | number> = new Set();
 const MAX_DEVICE_W = 2800; // cap rendered canvas width (memory)
 
 interface Props {
@@ -20,9 +20,9 @@ interface Props {
   pageW: number; // page coordinates (points)
   pageH?: number; // page height (points) — needed for fit-to-page
   groups?: MaskGroup[];
-  /** Revealed per-rect keys ("groupId:rectIndex"). */
-  revealedIds?: ReadonlySet<string>;
-  onToggle?: (key: string) => void;
+  /** Revealed group (card) ids — the whole answer reveals together. */
+  revealedIds?: ReadonlySet<string | number>;
+  onToggle?: (id: string | number) => void;
   highlightRects?: Rect[];
   /** "page" fits the whole page in the viewport; "width" fits the page width. */
   fitMode?: FitMode;
@@ -164,16 +164,15 @@ export function PageOverlay({
       >
         <canvas ref={canvasRef} className="page-canvas" />
         {fitScale > 0 &&
-          // Each rect toggles independently (key groupId:rectIndex) so different masks —
-          // including different lines of an over-merged answer — never reveal together.
-          groups.map((g) =>
-            g.rects.map((r, i) => {
+          groups.map((g) => {
+            // The whole answer (card) reveals together — a wrapped answer stays one card, while
+            // detection keeps genuinely separate answers as separate cards.
+            const revealed = revealedIds.has(g.id);
+            return g.rects.map((r, i) => {
               const h = r.h * fitScale;
-              const key = `${g.id}:${i}`;
-              const revealed = revealedIds.has(key);
               return (
                 <div
-                  key={key}
+                  key={`${g.id}:${i}`}
                   className={revealed ? "reveal-zone" : "mask"}
                   style={
                     {
@@ -187,12 +186,12 @@ export function PageOverlay({
                   }
                   onClick={(e) => {
                     e.stopPropagation();
-                    onToggle?.(key);
+                    onToggle?.(g.id);
                   }}
                 />
               );
-            }),
-          )}
+            });
+          })}
         {fitScale > 0 &&
           highlightRects?.map((r, i) => (
             <div
