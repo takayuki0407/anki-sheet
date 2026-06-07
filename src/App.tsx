@@ -9,6 +9,7 @@ import { PageViewer } from "./components/PageViewer";
 import { Settings } from "./components/Settings";
 import { Info } from "./components/Info";
 import { Login } from "./components/Login";
+import { Pricing } from "./components/Pricing";
 
 export function App() {
   const view = useApp((s) => s.view);
@@ -37,6 +38,7 @@ export function App() {
         {view.name === "settings" && <Settings deckId={view.deckId} />}
         {view.name === "info" && <Info />}
         {view.name === "login" && <Login />}
+        {view.name === "pricing" && <Pricing />}
       </main>
     </div>
   );

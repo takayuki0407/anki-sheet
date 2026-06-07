@@ -55,9 +55,14 @@ export function Home() {
           インストール不要、解析は端末内だけ。
         </p>
         <div className="hero-cta">
-          <button className="btn primary big-cta" onClick={start}>
-            無料で始める
-          </button>
+          <div className="hero-buttons">
+            <button className="btn primary big-cta" onClick={start}>
+              無料で始める
+            </button>
+            <button className="btn ghost big-cta" onClick={() => setView({ name: "pricing" })}>
+              料金プランを見る
+            </button>
+          </div>
           <p className="hero-note">ブラウザで今すぐ・登録不要</p>
         </div>
       </section>
@@ -107,6 +112,9 @@ export function Home() {
         <span>© 2026 Anki-sheet</span>
         <span className="muted">赤シート暗記 — 色付き答えのPDFを、そのまま暗記ツールに</span>
         <span className="home-footer-links">
+          <button className="link-btn" onClick={() => setView({ name: "pricing" })}>
+            料金プラン
+          </button>
           <button className="link-btn" onClick={() => setView({ name: "info" })}>
             情報・ヘルプ
           </button>

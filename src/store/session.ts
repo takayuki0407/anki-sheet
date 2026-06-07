@@ -7,7 +7,8 @@ export type View =
   | { name: "viewer"; deckId: number }
   | { name: "settings"; deckId: number }
   | { name: "info" }
-  | { name: "login" };
+  | { name: "login" }
+  | { name: "pricing" };
 
 interface AppState {
   view: View;
