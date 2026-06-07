@@ -244,6 +244,23 @@ export function PageViewer({ deckId }: { deckId: number }) {
       return n;
     });
 
+  // The red overlay is one of three EXCLUSIVE modes (no combining mask + manual sheet):
+  // 赤マスク (detection masks + tap-reveal) → 赤シート (draggable band, 縦読み only) → OFF.
+  const redMode: "mask" | "sheet" | "off" = sheetOn ? "mask" : manualSheet ? "sheet" : "off";
+  const cycleRed = () => {
+    setRevealed(new Set());
+    if (redMode === "mask") {
+      setSheetOn(false);
+      setManualSheet(mode === "scroll"); // 赤シート only in 縦読み; otherwise straight to OFF
+    } else if (redMode === "sheet") {
+      setSheetOn(false);
+      setManualSheet(false);
+    } else {
+      setSheetOn(true);
+      setManualSheet(false);
+    }
+  };
+
   // Keyboard: Space toggles the sheet, +/- zoom; in paged mode ←/→/Home/End navigate.
   const kref = useRef({ active: false, mode, goTo, stepZoom, toggle: () => {}, pageIndex, pageCount });
   kref.current = {
@@ -252,6 +269,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
     goTo,
     stepZoom,
     toggle: () => {
+      setManualSheet(false);
       setSheetOn((v) => !v);
       setRevealed(new Set());
     },
@@ -319,13 +337,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
           {deckName}
         </span>
         <button
-          className={`btn sm ${sheetOn ? "primary" : "ghost"}`}
-          onClick={() => {
-            setSheetOn((v) => !v);
-            setRevealed(new Set());
-          }}
+          className={`btn sm ${redMode !== "off" ? "primary" : "ghost"}`}
+          onClick={cycleRed}
+          title="赤マスク → 赤シート → OFF を切り替え（赤シートは縦読みのみ）"
         >
-          赤シート {sheetOn ? "ON" : "OFF"}
+          {redMode === "mask" ? "赤マスク" : redMode === "sheet" ? "赤シート" : "表示OFF"}
         </button>
       </div>
 
@@ -406,7 +422,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
         </button>
         <button
           className="btn ghost sm"
-          onClick={() => setMode((m) => (m === "paged" ? "scroll" : "paged"))}
+          onClick={() => {
+            const next = mode === "paged" ? "scroll" : "paged";
+            setMode(next);
+            if (next === "paged") setManualSheet(false);
+          }}
         >
           {mode === "paged" ? "縦読み" : "横読み"}
         </button>
@@ -416,15 +436,6 @@ export function PageViewer({ deckId }: { deckId: number }) {
         >
           {fitMode === "page" ? "幅に合わせる" : "全体表示"}
         </button>
-        {mode === "scroll" && (
-          <button
-            className={`btn sm ${manualSheet ? "primary" : "ghost"}`}
-            onClick={() => setManualSheet((v) => !v)}
-            title="任意の位置に動かせる赤シートを重ねる"
-          >
-            重ねシート
-          </button>
-        )}
         {fullscreenSupported && (
           <button className="btn ghost sm" onClick={toggleFullscreen}>
             {isFullscreen ? "⤢ 解除" : "⛶ 全画面"}
