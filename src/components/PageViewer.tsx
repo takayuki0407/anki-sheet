@@ -82,6 +82,7 @@ function RedSheet({
         onPointerUp={end}
         onPointerCancel={end}
       />
+      <div className="red-sheet-soft" style={{ top: band.top, height: band.height }} />
       <div
         className="red-sheet-grip"
         style={{ top: band.top - 11 }}
