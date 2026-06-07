@@ -13,7 +13,7 @@ import { renderCover } from "../pdf/pdfEngine";
 import { downloadBlob, exportBackup, importBackup } from "../db/backup";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
-import { listBooks, unregisterBook, type AccountBook } from "../sync/api";
+import { listBooks, unregisterBook, updateBookMeta, type AccountBook } from "../sync/api";
 import { downloadDeck } from "../sync/deck";
 import type { DeckRow } from "../types";
 
@@ -27,11 +27,11 @@ interface DeckVM {
   deck: DeckRow;
   count: number;
 }
-type SortMode = "new" | "name" | "answers";
+type SortMode = "new" | "name" | "recent";
 const SORT_LABELS: Record<SortMode, string> = {
   new: "新しい順",
   name: "名前順",
-  answers: "暗記数順",
+  recent: "最近開いた順",
 };
 
 /** Favorites pinned to the top, then ordered by the chosen mode. */
@@ -40,7 +40,7 @@ function sortVms(vms: DeckVM[], mode: SortMode): DeckVM[] {
     const fav = (b.deck.favorite ? 1 : 0) - (a.deck.favorite ? 1 : 0);
     if (fav !== 0) return fav;
     if (mode === "name") return a.deck.name.localeCompare(b.deck.name, "ja");
-    if (mode === "answers") return b.count - a.count;
+    if (mode === "recent") return (b.deck.openedAt ?? 0) - (a.deck.openedAt ?? 0);
     return b.deck.createdAt - a.deck.createdAt;
   });
 }
@@ -126,6 +126,21 @@ export function DeckList() {
       live = false;
     };
   }, [user]);
+
+  // Adopt favorite / latest-opened state from the account (set on other devices) for the books we
+  // also have locally. Server is authoritative for favorite; opened_at takes the most recent.
+  useEffect(() => {
+    if (!cloud || !vms) return;
+    for (const b of cloud) {
+      const local = vms.find((v) => v.deck.bookId === b.book_id)?.deck;
+      if (!local?.id) continue;
+      const patch: { favorite?: boolean; openedAt?: number } = {};
+      if (!!local.favorite !== !!b.favorite) patch.favorite = !!b.favorite;
+      if ((b.opened_at ?? 0) > (local.openedAt ?? 0)) patch.openedAt = b.opened_at;
+      if (Object.keys(patch).length) void updateDeck(local.id, patch);
+    }
+  }, [cloud, vms]);
+
   const localIds = new Set(((decks ?? []).map((d) => d.bookId).filter(Boolean) as string[]));
   const remote = (cloud ?? []).filter((b) => !localIds.has(b.book_id));
 
@@ -174,7 +189,7 @@ export function DeckList() {
               localStorage.setItem("shelfSort", v);
             }}
           >
-            {(["new", "name", "answers"] as SortMode[]).map((m) => (
+            {(["new", "name", "recent"] as SortMode[]).map((m) => (
               <option key={m} value={m}>
                 {SORT_LABELS[m]}
               </option>
@@ -245,6 +260,13 @@ function DeckBook({ deck, count }: { deck: DeckRow; count: number }) {
   const setView = useApp((s) => s.setView);
   const cover = useCover(deck.id!);
 
+  const open = () => {
+    const now = Date.now();
+    void updateDeck(deck.id!, { openedAt: now }); // for 最近開いた順
+    if (deck.bookId && useAuth.getState().user)
+      void updateBookMeta(deck.bookId, { openedAt: now }).catch(() => {});
+    setView({ name: "viewer", deckId: deck.id! });
+  };
   const onDelete = async () => {
     if (!confirm(`「${deck.name}」を削除しますか？`)) return;
     await deleteDeck(deck.id!);
@@ -253,16 +275,15 @@ function DeckBook({ deck, count }: { deck: DeckRow; count: number }) {
   };
   const toggleFav = (e: React.MouseEvent) => {
     e.stopPropagation();
-    void updateDeck(deck.id!, { favorite: !deck.favorite });
+    const next = !deck.favorite;
+    void updateDeck(deck.id!, { favorite: next });
+    if (deck.bookId && useAuth.getState().user)
+      void updateBookMeta(deck.bookId, { favorite: next }).catch(() => {});
   };
 
   return (
     <div className="book">
-      <button
-        className="book-cover"
-        title={deck.name}
-        onClick={() => setView({ name: "viewer", deckId: deck.id! })}
-      >
+      <button className="book-cover" title={deck.name} onClick={open}>
         {cover ? (
           <img src={cover} alt={deck.name} loading="lazy" />
         ) : (

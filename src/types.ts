@@ -56,6 +56,8 @@ export interface DeckRow {
   bookId?: string;
   /** Pinned to the top of the bookshelf when true. */
   favorite?: boolean;
+  /** Last time the book was opened (epoch ms) — drives the 最近開いた順 sort. */
+  openedAt?: number;
   /** Last-read page (0-based) so the book reopens where you left off. */
   lastPage?: number;
   /** Last reading mode ("scroll" = 縦読み / "paged" = 横読み). Default 縦読み. */

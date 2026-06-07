@@ -9,7 +9,7 @@ export const onRequestGet: Fn = async (ctx) => {
   const uid = ctx.data.uid!;
   const tier = await getTier(ctx.env, uid, ctx.data.email);
   const { results } = await ctx.env.DB.prepare(
-    "SELECT book_id, name, size, page_count, device, updated_at FROM books WHERE uid = ? ORDER BY updated_at DESC",
+    "SELECT book_id, name, size, page_count, device, updated_at, favorite, opened_at FROM books WHERE uid = ? ORDER BY updated_at DESC",
   )
     .bind(uid)
     .all();
