@@ -31,6 +31,8 @@ interface Band {
   height: number;
 }
 
+type RedMode = "mask" | "sheet" | "off";
+
 /**
  * Manual red sheet (縦読み only): a draggable / resizable translucent red band you slide over
  * the page like a physical red sheet. multiply blend keeps black text readable while red /
@@ -60,7 +62,10 @@ function RedSheet({
     if (d.mode === "move") {
       onChange({ top: Math.max(0, Math.min(Math.max(0, hh - band.height), d.top + dy)), height: band.height });
     } else {
-      onChange({ top: band.top, height: Math.max(28, Math.min(hh - band.top, d.h + dy)) });
+      // Resize from the TOP edge: the bottom stays fixed, the top moves.
+      const bottom = d.top + d.h;
+      const top = Math.max(0, Math.min(bottom - 28, d.top + dy));
+      onChange({ top, height: bottom - top });
     }
   };
   const end = (e: React.PointerEvent) => {
@@ -79,7 +84,7 @@ function RedSheet({
       />
       <div
         className="red-sheet-grip"
-        style={{ top: band.top + band.height - 11 }}
+        style={{ top: band.top - 11 }}
         onPointerDown={begin("resize")}
         onPointerMove={move}
         onPointerUp={end}
@@ -99,7 +104,6 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const docRef = useRef<PDFDocumentProxy | null>(null);
   const [docReady, setDocReady] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
-  const [sheetOn, setSheetOn] = useState(true);
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [zoom, setZoom] = useState(1);
   const [zoomEdit, setZoomEdit] = useState<string | null>(null); // raw text while typing %
@@ -114,10 +118,12 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [tocOpen, setTocOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const viewerRef = useRef<HTMLDivElement>(null);
-  // Manual red sheet (縦読み only) — a draggable / resizable translucent red band.
-  const [manualSheet, setManualSheet] = useState(false);
+  // Red overlay mode (exclusive): 赤マスク (detection masks) / 赤シート (draggable band, 縦読み
+  // only) / OFF. Persisted, along with the band's position+size.
+  const [redMode, setRedMode] = useState<RedMode>("mask");
   const [band, setBand] = useState<Band>({ top: 60, height: 150 });
   const sheetHostRef = useRef<HTMLDivElement>(null);
+  const sheetOn = redMode === "mask";
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -172,7 +178,8 @@ export function PageViewer({ deckId }: { deckId: number }) {
         // reopen where we left off, in the reading mode used last time
         setPageIndex(Math.max(0, Math.min(p.pageCount - 1, d.lastPage ?? 0)));
         setMode(d.lastMode ?? "scroll");
-        setSheetOn(d.sheetOn ?? true);
+        setRedMode(d.redMode ?? (d.sheetOn === false ? "off" : "mask"));
+        if (d.sheetBand) setBand(d.sheetBand);
         setRevealed(new Set(d.revealed ?? []));
         setDocReady(true);
         setStatus("ready");
@@ -209,18 +216,19 @@ export function PageViewer({ deckId }: { deckId: number }) {
   useEffect(() => {
     if (status !== "ready") return;
     const id = setTimeout(
-      () => void updateDeck(deckId, { revealed: [...revealed], sheetOn }),
+      () => void updateDeck(deckId, { revealed: [...revealed], redMode, sheetBand: band }),
       500,
     );
     return () => clearTimeout(id);
-  }, [revealed, sheetOn, status, deckId]);
+  }, [revealed, redMode, band, status, deckId]);
   const exit = () => {
     if (status === "ready")
       void updateDeck(deckId, {
         lastPage: pageIndex,
         lastMode: mode,
         revealed: [...revealed],
-        sheetOn,
+        redMode,
+        sheetBand: band,
       });
     setView({ name: "decks" });
   };
@@ -244,21 +252,15 @@ export function PageViewer({ deckId }: { deckId: number }) {
       return n;
     });
 
-  // The red overlay is one of three EXCLUSIVE modes (no combining mask + manual sheet):
-  // 赤マスク (detection masks + tap-reveal) → 赤シート (draggable band, 縦読み only) → OFF.
-  const redMode: "mask" | "sheet" | "off" = sheetOn ? "mask" : manualSheet ? "sheet" : "off";
-  const cycleRed = () => {
+  // 赤マスク and 赤シート are separate, mutually-exclusive toggles (tap the active one to turn
+  // it off). 赤シート is 縦読み only.
+  const selectMask = () => {
+    setRedMode((m) => (m === "mask" ? "off" : "mask"));
     setRevealed(new Set());
-    if (redMode === "mask") {
-      setSheetOn(false);
-      setManualSheet(mode === "scroll"); // 赤シート only in 縦読み; otherwise straight to OFF
-    } else if (redMode === "sheet") {
-      setSheetOn(false);
-      setManualSheet(false);
-    } else {
-      setSheetOn(true);
-      setManualSheet(false);
-    }
+  };
+  const selectSheet = () => {
+    setRedMode((m) => (m === "sheet" ? "off" : "sheet"));
+    setRevealed(new Set());
   };
 
   // Keyboard: Space toggles the sheet, +/- zoom; in paged mode ←/→/Home/End navigate.
@@ -269,8 +271,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
     goTo,
     stepZoom,
     toggle: () => {
-      setManualSheet(false);
-      setSheetOn((v) => !v);
+      setRedMode((m) => (m === "mask" ? "off" : "mask"));
       setRevealed(new Set());
     },
     pageIndex,
@@ -337,12 +338,19 @@ export function PageViewer({ deckId }: { deckId: number }) {
           {deckName}
         </span>
         <button
-          className={`btn sm ${redMode !== "off" ? "primary" : "ghost"}`}
-          onClick={cycleRed}
-          title="赤マスク → 赤シート → OFF を切り替え（赤シートは縦読みのみ）"
+          className={`btn sm ${redMode === "mask" ? "primary" : "ghost"}`}
+          onClick={selectMask}
         >
-          {redMode === "mask" ? "赤マスク" : redMode === "sheet" ? "赤シート" : "表示OFF"}
+          赤マスク
         </button>
+        {mode === "scroll" && (
+          <button
+            className={`btn sm ${redMode === "sheet" ? "primary" : "ghost"}`}
+            onClick={selectSheet}
+          >
+            赤シート
+          </button>
+        )}
       </div>
 
       {ready && mode === "paged" && (
@@ -379,7 +387,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
             onVisiblePage={setPageIndex}
             onPinchZoom={onPinchZoom}
           />
-          {manualSheet && <RedSheet band={band} onChange={setBand} hostRef={sheetHostRef} />}
+          {redMode === "sheet" && <RedSheet band={band} onChange={setBand} hostRef={sheetHostRef} />}
         </div>
       )}
 
@@ -422,11 +430,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
         </button>
         <button
           className="btn ghost sm"
-          onClick={() => {
-            const next = mode === "paged" ? "scroll" : "paged";
-            setMode(next);
-            if (next === "paged") setManualSheet(false);
-          }}
+          onClick={() => setMode((m) => (m === "paged" ? "scroll" : "paged"))}
         >
           {mode === "paged" ? "縦読み" : "横読み"}
         </button>

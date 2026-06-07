@@ -58,8 +58,12 @@ export interface DeckRow {
   lastMode?: "scroll" | "paged";
   /** Persisted reveal state: card ids revealed last session (whole answer reveals together). */
   revealed?: number[];
-  /** Whether the red sheet was ON when the book was last closed (default true). */
+  /** Legacy red-sheet on/off (superseded by redMode; kept for back-compat on load). */
   sheetOn?: boolean;
+  /** Red overlay mode last used: 赤マスク / 赤シート / OFF. */
+  redMode?: "mask" | "sheet" | "off";
+  /** Manual red-sheet band position + height (px) last used. */
+  sheetBand?: { top: number; height: number };
 }
 
 export interface PdfRow {
