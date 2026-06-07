@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 export type View =
+  | { name: "home" }
   | { name: "decks" }
   | { name: "import" }
   | { name: "viewer"; deckId: number }
@@ -12,6 +13,7 @@ interface AppState {
 }
 
 export const useApp = create<AppState>((set) => ({
-  view: { name: "decks" },
+  // The marketing landing is the front door; the bookshelf is one click away.
+  view: { name: "home" },
   setView: (view) => set({ view }),
 }));
