@@ -9,9 +9,10 @@ const d = new Date();
 const p = (n: number) => String(n).padStart(2, "0");
 const BUILD_ID = `${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
 
-// Base is relative so the built app can be opened from any subpath / static host.
+// Base is absolute "/" so client-side routes (/, /service, /price, /app/…) load assets from the
+// site root regardless of the current path depth. The app is served at the domain root on Pages.
 export default defineConfig({
-  base: "./",
+  base: "/",
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   // Emit sourcemaps so a minified production stack trace (e.g. from an iPhone) can be
   // mapped back to source locally with the dist/*.map files.
@@ -26,8 +27,8 @@ export default defineConfig({
         short_name: "Anki-sheet",
         lang: "ja",
         description: "色付き答えのPDFを取り込むと、答えを自動で検出して隠せる暗記ツール",
-        start_url: "./",
-        scope: "./",
+        start_url: "/",
+        scope: "/",
         display: "standalone",
         background_color: "#fffdf7",
         theme_color: "#d4a373",
@@ -40,6 +41,10 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,mjs}"],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // SPA routing: serve the cached app shell for client routes (/, /service, /price, /app/…),
+        // but never for the API or the standalone legal pages (privacy.html / terms.html).
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/api\//, /\.html$/],
         // cMaps + standard fonts are cached on first use (avoids precaching ~170 files).
         runtimeCaching: [
           {

@@ -1,0 +1,4 @@
+# SPA fallback: serve the app shell for any client route that isn't a static file or an /api/*
+# Function (those are matched first by Cloudflare Pages). Lets a direct hit / refresh on
+# /service, /price, /app/… load index.html, after which the client router takes over.
+/*    /index.html   200

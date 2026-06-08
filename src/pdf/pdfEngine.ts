@@ -13,8 +13,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
 // cMaps + standard fonts are copied into public/pdfjs (see scripts/copy-pdfjs-assets.mjs).
 // They are REQUIRED: without them, CJK (CID) fonts neither render nor extract text.
-const CMAP_URL = new URL("pdfjs/cmaps/", document.baseURI).toString();
-const STANDARD_FONT_URL = new URL("pdfjs/standard_fonts/", document.baseURI).toString();
+// Resolved from the site root (leading "/") so they load on nested routes like /app/read/5 too.
+const CMAP_URL = new URL("/pdfjs/cmaps/", document.baseURI).toString();
+const STANDARD_FONT_URL = new URL("/pdfjs/standard_fonts/", document.baseURI).toString();
 
 export async function loadPdf(data: ArrayBuffer | Blob): Promise<PDFDocumentProxy> {
   const buf = data instanceof Blob ? await data.arrayBuffer() : data;
