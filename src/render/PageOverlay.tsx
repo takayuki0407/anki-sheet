@@ -79,9 +79,11 @@ export function PageOverlay({
   const prevCssW = useRef(0);
   const ticking = useRef(false);
 
-  useDragPan(scrollRef); // mouse/pen hand-tool pan
-  useTouchPan(scrollRef); // touch: angle-based vertical / free 2D pan with momentum
-  useWheelZoom(scrollRef, onPinchZoom); // trackpad / ctrl+wheel zoom (desktop)
+  // While armed to draw a mask, suppress panning/zoom so the drag draws a rectangle (the pan hooks
+  // listen on the scroll container and would otherwise grab the gesture before the draw surface).
+  useDragPan(scrollRef, !drawArm); // mouse/pen hand-tool pan
+  useTouchPan(scrollRef, !drawArm); // touch: angle-based vertical / free 2D pan with momentum
+  useWheelZoom(scrollRef, onPinchZoom, !drawArm); // trackpad / ctrl+wheel zoom (desktop)
 
   useLayoutEffect(() => {
     const el = scrollRef.current;

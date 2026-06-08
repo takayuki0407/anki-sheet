@@ -464,6 +464,9 @@ body {
   background: var(--card);
   border-bottom: 1px solid var(--line);
 }
+.edit-bar-spacer {
+  flex: 1 1 auto;
+}
 .mask.mask-edit {
   background: rgba(226, 59, 59, 0.28);
   border: 1px dashed #e23b3b;

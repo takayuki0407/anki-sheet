@@ -7,10 +7,10 @@ import { useEffect, type RefObject } from "react";
  * that the browser fires afterwards, so dragging never toggles an answer mask or
  * flips the page; a plain tap (under the threshold) still clicks normally.
  */
-export function useDragPan(ref: RefObject<HTMLElement | null>): void {
+export function useDragPan(ref: RefObject<HTMLElement | null>, enabled = true): void {
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || !enabled) return;
     let down = false;
     let panning = false;
     let pointerId = -1;
@@ -79,7 +79,7 @@ export function useDragPan(ref: RefObject<HTMLElement | null>): void {
       el.removeEventListener("pointerup", onUp);
       el.removeEventListener("pointercancel", onUp);
     };
-  }, [ref]);
+  }, [ref, enabled]);
 }
 
 /**
@@ -91,10 +91,11 @@ export function useDragPan(ref: RefObject<HTMLElement | null>): void {
 export function useWheelZoom(
   ref: RefObject<HTMLElement | null>,
   onZoom?: (factor: number) => void,
+  enabled = true,
 ): void {
   useEffect(() => {
     const el = ref.current;
-    if (!el || !onZoom) return;
+    if (!el || !onZoom || !enabled) return;
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return; // plain wheel / two-finger scroll = pan, leave it
       e.preventDefault(); // stop the browser's own page zoom
@@ -103,7 +104,7 @@ export function useWheelZoom(
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [ref, onZoom]);
+  }, [ref, onZoom, enabled]);
 }
 
 /**
@@ -117,10 +118,10 @@ export function useWheelZoom(
  * on iOS — correcting native momentum scroll there does not work. We therefore also
  * replace native momentum with our own fling. Mouse/pen use useDragPan instead.
  */
-export function useTouchPan(ref: RefObject<HTMLElement | null>): void {
+export function useTouchPan(ref: RefObject<HTMLElement | null>, enabled = true): void {
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || !enabled) return;
     let active = false;
     let mode: "none" | "vertical" | "free" = "none";
     let panned = false;
@@ -226,5 +227,5 @@ export function useTouchPan(ref: RefObject<HTMLElement | null>): void {
       el.removeEventListener("touchend", onEnd);
       el.removeEventListener("touchcancel", onEnd);
     };
-  }, [ref]);
+  }, [ref, enabled]);
 }

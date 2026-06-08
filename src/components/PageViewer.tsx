@@ -141,9 +141,13 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [band, setBand] = useState<Band>({ top: 60, height: 150 });
   const sheetHostRef = useRef<HTMLDivElement>(null);
   const sheetOn = redMode === "mask";
-  // Manual mask editing (paged mode): tap a mask to delete it, drag to add one.
+  // Manual mask editing (paged mode): tap a mask to delete it, drag to add one. Edits are STAGED
+  // (added/removed in a local buffer) and only written to the DB on 保存; キャンセル discards them.
   const [editMode, setEditMode] = useState(false);
   const [drawArm, setDrawArm] = useState(false);
+  const [editAdds, setEditAdds] = useState<{ tempId: number; pageIndex: number; rect: Rect }[]>([]);
+  const [editDels, setEditDels] = useState<Set<number>>(new Set());
+  const tempIdRef = useRef(-1);
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -390,17 +394,49 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const groups: MaskGroup[] = sheetOn
     ? currentCards.map((c) => ({ id: c.id!, rects: c.rects.length ? c.rects : [c.answerRect] }))
     : [];
-  // In edit mode show every detected mask (regardless of red mode) so any can be tapped to delete.
-  const editGroups: MaskGroup[] = currentCards.map((c) => ({
-    id: c.id!,
-    rects: c.rects.length ? c.rects : [c.answerRect],
-  }));
-  const onAddMask = async (rect: Rect) => {
-    if (pdf?.id == null) return;
-    await addCard(deckId, pdf.id, pageIndex, rect); // live query refreshes the masks
+  // Staged edits applied to the current page: base masks (minus pending deletes) + pending adds.
+  // Pending adds carry a negative temp id so tapping one just removes it from the buffer.
+  const editDirty = editAdds.length > 0 || editDels.size > 0;
+  const editGroups: MaskGroup[] = [
+    ...currentCards
+      .filter((c) => !editDels.has(c.id!))
+      .map((c) => ({ id: c.id!, rects: c.rects.length ? c.rects : [c.answerRect] })),
+    ...editAdds
+      .filter((a) => a.pageIndex === pageIndex)
+      .map((a) => ({ id: a.tempId, rects: [a.rect] })),
+  ];
+  const onAddMask = (rect: Rect) => {
+    setEditAdds((a) => [...a, { tempId: tempIdRef.current--, pageIndex, rect }]);
     setDrawArm(false);
   };
-  const onDeleteMask = (id: string | number) => void deleteCard(id as number);
+  const onDeleteMask = (id: string | number) => {
+    const n = id as number;
+    if (n < 0) setEditAdds((a) => a.filter((x) => x.tempId !== n));
+    else setEditDels((s) => new Set(s).add(n));
+  };
+  const discardEdits = () => {
+    setEditAdds([]);
+    setEditDels(new Set());
+    setDrawArm(false);
+  };
+  const saveEdit = async () => {
+    if (pdf?.id != null) {
+      for (const id of editDels) await deleteCard(id);
+      for (const a of editAdds) await addCard(deckId, pdf.id, a.pageIndex, a.rect);
+    }
+    discardEdits();
+    setEditMode(false);
+  };
+  const cancelEdit = () => {
+    discardEdits();
+    setEditMode(false);
+  };
+  // Exit / navigate with unsaved edits → confirm discarding them first.
+  const guardEdit = (action: () => void) => {
+    if (editMode && editDirty && !window.confirm("保存していない編集があります。破棄しますか？")) return;
+    if (editMode && editDirty) discardEdits();
+    action();
+  };
 
   const addCurrentBookmark = async () => {
     const title = window.prompt("しおりの名前（章・節など）", `${pageIndex + 1}ページ`);
@@ -416,7 +452,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
   return (
     <div className="viewer" ref={viewerRef}>
       <div className="review-bar">
-        <button className="btn ghost sm" onClick={exit}>
+        <button className="btn ghost sm" onClick={() => guardEdit(exit)}>
           終了
         </button>
         <button className="btn ghost sm" onClick={() => setTocOpen(true)}>
@@ -441,28 +477,34 @@ export function PageViewer({ deckId }: { deckId: number }) {
                 赤シート
               </button>
             )}
+            <button
+              className="btn ghost sm"
+              onClick={() => {
+                setEditMode(true);
+                setDrawArm(false);
+                setMode("paged"); // mask editing happens on the single paged view
+              }}
+            >
+              編集
+            </button>
           </>
         )}
-        <button
-          className={`btn sm ${editMode ? "primary" : "ghost"}`}
-          onClick={() => {
-            const on = !editMode;
-            setEditMode(on);
-            setDrawArm(false);
-            if (on) setMode("paged"); // mask editing happens on the single paged view
-          }}
-        >
-          {editMode ? "編集を終了" : "編集"}
-        </button>
       </div>
 
       {editMode && (
         <div className="edit-bar">
           <span className="muted small">
-            マスクをタップで削除／「マスク追加」を押してドラッグで囲むと追加できます
+            マスクをタップで削除／「マスク追加」を押してドラッグで囲むと追加（p.{pageIndex + 1}）
           </span>
           <button className={`btn sm ${drawArm ? "primary" : ""}`} onClick={() => setDrawArm((v) => !v)}>
             {drawArm ? "囲んでください…（取消）" : "＋ マスク追加"}
+          </button>
+          <span className="edit-bar-spacer" />
+          <button className="btn ghost sm" onClick={cancelEdit}>
+            編集をキャンセル
+          </button>
+          <button className="btn primary sm" onClick={() => void saveEdit()}>
+            編集を保存
           </button>
         </div>
       )}
@@ -563,7 +605,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
         )}
         {mode === "paged" && (
           <>
-            <button className="btn sm" disabled={pageIndex <= 0} onClick={() => goTo(pageIndex - 1)}>
+            <button
+              className="btn sm"
+              disabled={pageIndex <= 0}
+              onClick={() => guardEdit(() => goTo(pageIndex - 1))}
+            >
               ← 前
             </button>
             <input
@@ -572,6 +618,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
               min={1}
               max={pageCount}
               value={pageIndex + 1}
+              disabled={editMode}
               onChange={(e) => goTo(Number(e.target.value) - 1)}
             />
             <input
@@ -580,12 +627,13 @@ export function PageViewer({ deckId }: { deckId: number }) {
               min={1}
               max={pageCount}
               value={pageIndex + 1}
+              disabled={editMode}
               onChange={(e) => goTo(Number(e.target.value) - 1)}
             />
             <button
               className="btn sm"
               disabled={pageIndex >= pageCount - 1}
-              onClick={() => goTo(pageIndex + 1)}
+              onClick={() => guardEdit(() => goTo(pageIndex + 1))}
             >
               次 →
             </button>
@@ -619,10 +667,12 @@ export function PageViewer({ deckId }: { deckId: number }) {
                 <li key={b.id} className="toc-item">
                   <button
                     className="toc-jump"
-                    onClick={() => {
-                      jumpToPage(b.pageIndex);
-                      setTocOpen(false);
-                    }}
+                    onClick={() =>
+                      guardEdit(() => {
+                        jumpToPage(b.pageIndex);
+                        setTocOpen(false);
+                      })
+                    }
                   >
                     <span className="toc-title">{b.title}</span>
                     <span className="toc-page">p.{b.pageIndex + 1}</span>
