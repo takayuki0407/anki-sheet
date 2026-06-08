@@ -13,7 +13,7 @@
     "dev:host": "vite --host",
     "prebuild": "node scripts/copy-pdfjs-assets.mjs",
     "build": "vite build",
-    "build:private": "node scripts/copy-pdfjs-assets.mjs && vite build --mode private",
+    "build:public": "node scripts/copy-pdfjs-assets.mjs && vite build --mode public",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",

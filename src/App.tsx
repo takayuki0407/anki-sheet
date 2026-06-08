@@ -19,10 +19,11 @@ import { ComingSoon } from "./components/ComingSoon";
 // (bookshelf / viewer / …) get the minimal app topbar instead.
 const MARKETING = new Set(["home", "service", "pricing"]);
 
-// Not publicly launched yet: a production build with VITE_PRIVATE=true renders only a coming-soon
-// page (the app isn't freely usable before web billing exists). Preview builds keep the full app
-// for testing. The /api/* sync backend (Pages Functions) is separate and unaffected.
-const PRIVATE = import.meta.env.VITE_PRIVATE === "true";
+// Not publicly launched yet. FAIL-CLOSED: the app renders only a coming-soon page UNLESS the build
+// explicitly opts in via VITE_PUBLIC=true (`npm run build:public`). So a plain `npm run build`
+// (the production deploy) is private by default — you can't accidentally expose the app before web
+// billing exists. The /api/* sync backend (Pages Functions) is separate and always served.
+const PRIVATE = import.meta.env.VITE_PUBLIC !== "true";
 
 export function App() {
   const view = useApp((s) => s.view);
