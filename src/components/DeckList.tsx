@@ -168,7 +168,7 @@ export function DeckList() {
       <div className="panel-head">
         <h2>本棚</h2>
         <button className="btn primary" onClick={() => setView({ name: "import" })}>
-          ＋ PDFを取り込む
+          ＋ 取り込む
         </button>
       </div>
 

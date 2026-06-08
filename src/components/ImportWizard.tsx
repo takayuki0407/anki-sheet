@@ -16,12 +16,14 @@ import {
   DEFAULT_MAGENTA_BAND,
   type ColorPreset,
   type DeckColorConfig,
+  type DetectedCloze,
 } from "../types";
 
 type Phase =
   | { k: "idle" }
+  | { k: "configuring"; blob: Blob } // choose the answer color(s) before detecting
   | { k: "probing" }
-  | { k: "detecting"; page: number; total: number; found: number }
+  | { k: "detecting"; color: number; colors: number; page: number; total: number; found: number }
   | { k: "ready"; result: PdfDetectionResult; blob: Blob }
   | { k: "saving" }
   | { k: "overlimit"; pending: PendingImport }
@@ -47,81 +49,121 @@ function describeError(e: unknown): { message: string; detail: string } {
 const MAX_PDF_MB = 100;
 const MAX_PDF_BYTES = MAX_PDF_MB * 1024 * 1024;
 
+const presetToConfig = (p: ColorPreset): DeckColorConfig => ({
+  ...DEFAULT_MAGENTA_BAND,
+  hueTarget: p.hueTarget,
+  hueTol: p.hueTol,
+});
+
+// Merge clozes from several single-color passes, dropping near-duplicates (an answer two colors
+// both matched) by page + rounded bbox so a glyph near a hue boundary isn't masked twice.
+function mergeClozes(lists: DetectedCloze[][]): DetectedCloze[] {
+  const seen = new Set<string>();
+  const out: DetectedCloze[] = [];
+  for (const list of lists) {
+    for (const c of list) {
+      const key = `${c.pageIndex}:${Math.round(c.bbox.x)}:${Math.round(c.bbox.y)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(c);
+    }
+  }
+  return out;
+}
+
 export function ImportWizard() {
   const setView = useApp((s) => s.setView);
   const [phase, setPhase] = useState<Phase>({ k: "idle" });
   const [name, setName] = useState("");
   const [copied, setCopied] = useState(false);
-  // Answer color to detect (chosen before / at import, like the iOS version). Kept in a ref so
-  // the async detect closure always reads the latest choice.
-  const [color, setColor] = useState<DeckColorConfig>(DEFAULT_MAGENTA_BAND);
-  const colorRef = useRef(color);
-  colorRef.current = color;
+  // Answer-color choice made BEFORE detecting (the user picks; we no longer silently auto-detect):
+  // 自動 (probe + pick one) OR one-or-more manual presets (union of their detections).
+  const [useAuto, setUseAuto] = useState(true);
+  const [manualKeys, setManualKeys] = useState<Set<string>>(new Set(["red"]));
+  const colorRef = useRef<DeckColorConfig>(DEFAULT_MAGENTA_BAND); // primary color saved on the deck
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // `auto` (first import): probe a few pages to pick the answer color automatically before the full
-  // detect. Re-detect from the ready screen passes auto=false (use the color the user chose).
-  const detect = useCallback(async (blob: Blob, auto = false) => {
-    const controller = new AbortController();
-    abortRef.current = controller;
-    try {
-      if (auto) {
-        setPhase({ k: "probing" });
-        const cfg = await autoDetectColorConfig(blob, controller.signal);
-        setColor(cfg);
-        colorRef.current = cfg;
-      }
-      setPhase({ k: "detecting", page: 0, total: 0, found: 0 });
-      const result = await detectClozesInPdf(
-        blob,
-        colorRef.current,
-        (page, total, found) => setPhase({ k: "detecting", page, total, found }),
-        controller.signal,
-      );
-      setPhase({ k: "ready", result, blob });
-    } catch (e) {
-      if (e instanceof CancelledError) setPhase({ k: "idle" });
-      else setPhase({ k: "error", ...describeError(e) });
-    } finally {
-      abortRef.current = null;
+  const handleFile = useCallback((file: File) => {
+    if (file.size > MAX_PDF_BYTES) {
+      setPhase({
+        k: "error",
+        message: `PDFが大きすぎます（${Math.round(file.size / 1024 / 1024)}MB）。1ファイル ${MAX_PDF_MB}MB までです。`,
+        detail: `file: ${file.name}\nsize: ${file.size} bytes`,
+      });
+      return;
     }
+    setName(file.name.replace(/\.pdf$/i, ""));
+    setPhase({ k: "configuring", blob: file.slice(0, file.size, "application/pdf") });
   }, []);
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      if (file.size > MAX_PDF_BYTES) {
-        setPhase({
-          k: "error",
-          message: `PDFが大きすぎます（${Math.round(file.size / 1024 / 1024)}MB）。1ファイル ${MAX_PDF_MB}MB までです。`,
-          detail: `file: ${file.name}\nsize: ${file.size} bytes`,
-        });
-        return;
+  // Run detection for the chosen color(s): 自動 probes one color; manual unions each selected color
+  // (one pass per color — single-color PDFs run once). Cancel returns to the color chooser.
+  const runDetect = useCallback(
+    async (blob: Blob) => {
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        let configs: DeckColorConfig[];
+        if (useAuto) {
+          setPhase({ k: "probing" });
+          configs = [await autoDetectColorConfig(blob, controller.signal)];
+        } else {
+          configs = [...manualKeys]
+            .map((k) => COLOR_PRESETS.find((p) => p.key === k))
+            .filter((p): p is ColorPreset => !!p)
+            .map(presetToConfig);
+          if (!configs.length) configs = [DEFAULT_MAGENTA_BAND];
+        }
+        colorRef.current = configs[0];
+        const lists: DetectedCloze[][] = [];
+        let base: PdfDetectionResult | null = null;
+        for (let i = 0; i < configs.length; i++) {
+          const r = await detectClozesInPdf(
+            blob,
+            configs[i],
+            (page, total, found) =>
+              setPhase({ k: "detecting", color: i + 1, colors: configs.length, page, total, found }),
+            controller.signal,
+          );
+          lists.push(r.clozes);
+          if (!base) base = r;
+        }
+        setPhase({ k: "ready", result: { ...base!, clozes: mergeClozes(lists) }, blob });
+      } catch (e) {
+        if (e instanceof CancelledError) setPhase({ k: "configuring", blob });
+        else setPhase({ k: "error", ...describeError(e) });
+      } finally {
+        abortRef.current = null;
       }
-      setName(file.name.replace(/\.pdf$/i, ""));
-      await detect(file.slice(0, file.size, "application/pdf"), true); // first import → auto color
     },
-    [detect],
+    [useAuto, manualKeys],
   );
 
-  const pickPreset = (p: ColorPreset) =>
-    setColor((c) => ({ ...c, hueTarget: p.hueTarget, hueTol: p.hueTol }));
-  const presetActive = (p: ColorPreset) =>
-    color.hueTarget === p.hueTarget && color.hueTol === p.hueTol;
+  const toggleManual = (key: string) => {
+    setUseAuto(false);
+    setManualKeys((s) => {
+      const n = new Set(s);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      if (!n.size) n.add(key); // keep at least one manual color selected
+      return n;
+    });
+  };
 
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) void handleFile(f);
+    if (f) handleFile(f);
   };
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const f = e.dataTransfer.files?.[0];
-    if (f && f.type === "application/pdf") void handleFile(f);
+    if (f && f.type === "application/pdf") handleFile(f);
   };
 
-  // Create the local deck (after a slot has been reserved) and open the bookshelf. Cover is
-  // generated lazily in the bookshelf, so import doesn't load the PDF twice (lower peak memory).
+  // Create the local deck (after a slot has been reserved) and open it. Cover is generated lazily in
+  // the bookshelf, so import doesn't load the PDF twice (lower peak memory).
   const finishImport = useCallback(
     async (p: PendingImport) => {
       setPhase({ k: "saving" });
@@ -138,7 +180,7 @@ export function ImportWizard() {
       if (p.result.outline.length) await importBookmarks(deckId, p.result.outline);
       // Pro cloud sync: upload the PDF + content in the background (best-effort; 403 on standard).
       if (useAuth.getState().user) void uploadDeck(p.bookId, deckId).catch(() => {});
-      setView({ name: "decks" });
+      setView({ name: "viewer", deckId }); // 保存して開く
     },
     [setView],
   );
@@ -175,6 +217,34 @@ export function ImportWizard() {
     }
   };
 
+  // Answer-color chooser: 自動 + the presets (manual is multi-select). Shared by the configure
+  // screen and the result screen (change colors → re-detect).
+  const colorChooser = (
+    <div className="import-color">
+      <span className="import-color-label">答えの色（複数選択できます）</span>
+      <div className="preset-row">
+        <button
+          className={`btn sm ${useAuto ? "primary" : ""}`}
+          onClick={() => setUseAuto(true)}
+        >
+          自動
+        </button>
+        {COLOR_PRESETS.map((p) => (
+          <button
+            key={p.key}
+            className={`btn sm ${!useAuto && manualKeys.has(p.key) ? "primary" : ""}`}
+            onClick={() => toggleManual(p.key)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <p className="muted small">
+        自動はシステムが答えの色を判定します。色を選ぶと、選んだ色（複数可）で検出します。
+      </p>
+    </div>
+  );
+
   return (
     <div className="panel">
       <div className="panel-head">
@@ -194,10 +264,25 @@ export function ImportWizard() {
           <p className="dz-big">赤シート対応のPDFをドロップ</p>
           <p className="dz-sub">またはクリックして選択</p>
           <p className="dz-note">
-            答えの色は自動で判定して語句を検出します（検出後に色を変えて再検出もできます）。
+            次の画面で答えの色（自動／赤・マゼンタなど、複数可）を選んで検出します。
             解析はこの端末内で行われます（クラウド同期を使う場合のみ、Proでアカウントに保存）。
           </p>
           <input ref={inputRef} type="file" accept="application/pdf" hidden onChange={onPick} />
+        </div>
+      )}
+
+      {phase.k === "configuring" && (
+        <div className="ready-box">
+          <p className="muted">「{name || "無題"}」を取り込みます。答えの色を選んでください。</p>
+          {colorChooser}
+          <div className="row">
+            <button className="btn ghost" onClick={() => setPhase({ k: "idle" })}>
+              別のPDFを選ぶ
+            </button>
+            <button className="btn primary" onClick={() => void runDetect(phase.blob)}>
+              取り込む
+            </button>
+          </div>
         </div>
       )}
 
@@ -213,7 +298,10 @@ export function ImportWizard() {
 
       {phase.k === "detecting" && (
         <div className="progress-box">
-          <p>解析中… ページ {phase.page}/{phase.total || "?"}</p>
+          <p>
+            解析中… ページ {phase.page}/{phase.total || "?"}
+            {phase.colors > 1 ? `（色 ${phase.color}/${phase.colors}）` : ""}
+          </p>
           <div className="bar">
             <div
               className="bar-fill"
@@ -238,33 +326,20 @@ export function ImportWizard() {
               PDFの目次 {phase.result.outline.length} 件もしおりに取り込みます
             </p>
           )}
-          <div className="import-color">
-            <span className="import-color-label">検出が合わない時は色を変えて再検出</span>
-            <div className="preset-row">
-              {COLOR_PRESETS.map((p) => (
-                <button
-                  key={p.key}
-                  className={`btn sm ${presetActive(p) ? "primary" : ""}`}
-                  onClick={() => pickPreset(p)}
-                >
-                  {p.label}
-                </button>
-              ))}
-              <button className="btn sm" onClick={() => void detect(phase.blob)}>
-                この色で再検出
-              </button>
-            </div>
-          </div>
+          {colorChooser}
+          <button className="btn sm" onClick={() => void runDetect(phase.blob)}>
+            この色で再検出
+          </button>
           <label className="field">
             デッキ名
             <input value={name} onChange={(e) => setName(e.target.value)} />
           </label>
           <div className="row">
             <button className="btn ghost" onClick={() => setPhase({ k: "idle" })}>
-              やり直す
+              別のPDFを選ぶ
             </button>
             <button className="btn primary" onClick={save}>
-              このデッキを作成
+              保存して開く
             </button>
           </div>
         </div>
