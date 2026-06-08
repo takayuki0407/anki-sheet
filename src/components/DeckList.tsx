@@ -231,13 +231,20 @@ export function DeckList() {
 
       {cloudPro && remote.some((b) => b.size > 0) && (
         <div className="cloud-section">
-          <h3 className="section">クラウド（他の端末の本）</h3>
-          <p className="muted small">同じアカウントの本です。クリックでこの端末に取り込めます。</p>
+          <h3 className="section">クラウド（この端末にない本）</h3>
+          <p className="muted small">
+            同じアカウントの本です。「この端末に取り込む」で追加、「クラウドから削除」で
+            すべての端末から完全に削除します。
+          </p>
           <ul className="cloud-list">
             {remote
               .filter((b) => b.size > 0)
               .map((b) => (
-                <CloudBook key={b.book_id} book={b} />
+                <CloudBook
+                  key={b.book_id}
+                  book={b}
+                  onRemoved={(id) => setCloud((c) => c?.filter((x) => x.book_id !== id) ?? null)}
+                />
               ))}
           </ul>
         </div>
@@ -246,8 +253,9 @@ export function DeckList() {
   );
 }
 
-/** A Pro cloud book not on this device — one tap downloads + rebuilds it (Pro-only section). */
-function CloudBook({ book }: { book: AccountBook }) {
+/** A Pro cloud book not on this device — download it back, or permanently remove it from the cloud
+ * (which deletes the R2 file + registry row for the whole account). */
+function CloudBook({ book, onRemoved }: { book: AccountBook; onRemoved: (bookId: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const download = async () => {
@@ -260,12 +268,32 @@ function CloudBook({ book }: { book: AccountBook }) {
       setBusy(false);
     }
   };
+  const remove = async () => {
+    if (
+      !confirm(
+        `「${book.name || "（無題）"}」をクラウドから完全に削除しますか？\nすべての端末から取り込めなくなります。この操作は元に戻せません。`,
+      )
+    )
+      return;
+    setBusy(true);
+    setErrMsg(null);
+    try {
+      await unregisterBook(book.book_id); // deletes the R2 PDF/content + registry row + progress
+      onRemoved(book.book_id);
+    } catch (e) {
+      setErrMsg(syncErrorMessage(e));
+      setBusy(false);
+    }
+  };
   return (
     <li className="cloud-item">
       <span className="cloud-name">{book.name || "（無題）"}</span>
       <span className="cloud-device">{book.device ?? ""}</span>
       <button className="btn sm" onClick={download} disabled={busy}>
         {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
+      </button>
+      <button className="btn sm ghost" onClick={remove} disabled={busy}>
+        クラウドから削除
       </button>
       {errMsg && <p className="cloud-error">{errMsg}</p>}
     </li>
@@ -284,10 +312,16 @@ function DeckBook({ deck, count }: { deck: DeckRow; count: number }) {
     setView({ name: "viewer", deckId: deck.id! });
   };
   const onDelete = async () => {
-    if (!confirm(`「${deck.name}」を削除しますか？`)) return;
+    if (
+      !confirm(
+        `「${deck.name}」をこの端末から削除しますか？\nクラウドに保存されている本は、あとで「クラウド」から取り込み直せます。`,
+      )
+    )
+      return;
+    // Local-only delete: do NOT remove the cloud copy. The account's cloud master persists so OTHER
+    // devices keep it and this device can re-download it later. Permanent cloud deletion is the
+    // explicit「クラウドから削除」action in the cloud section.
     await deleteDeck(deck.id!);
-    // Free the account-global slot (best-effort; ignore when offline / signed out).
-    if (deck.bookId && useAuth.getState().user) void unregisterBook(deck.bookId).catch(() => {});
   };
   const toggleFav = (e: React.MouseEvent) => {
     e.stopPropagation();

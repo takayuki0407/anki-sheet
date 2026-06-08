@@ -1,5 +1,7 @@
-// Unregister a book (frees an account-global slot). Idempotent. The Pro PDF blob in R2, if any,
-// is removed here too once R2 is wired up (TODO).
+// DELETE permanently removes a book from the account's CLOUD: its R2 objects (PDF blob + content
+// JSON), the registry row, and its progress. This is the deliberate「クラウドから削除」action — a
+// plain bookshelf delete is LOCAL-only and must NOT call it, so the cloud master survives for other
+// devices + re-download. Idempotent.
 // PATCH updates per-book account state shared across devices: favorite (pinned) + opened_at (the
 // last-opened time; merged as MAX so the most recent open across devices wins). No-op when the
 // book isn't registered for this account; not tier-gated (cheap D1 metadata on an existing row).
