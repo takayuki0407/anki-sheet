@@ -58,17 +58,22 @@ const presetToConfig = (p: ColorPreset): DeckColorConfig => ({
   hueTol: p.hueTol,
 });
 
-// Merge clozes from several single-color passes, dropping near-duplicates (an answer two colors
-// both matched) by page + rounded bbox so a glyph near a hue boundary isn't masked twice.
+// Merge clozes from several single-color passes, dropping ONLY true duplicates (an answer two
+// colors both matched) — kept unless an already-kept cloze on the same page actually OVERLAPS it.
+// Distinct answers never overlap, so none are lost. (Only used when 2+ colors are selected.)
 function mergeClozes(lists: DetectedCloze[][]): DetectedCloze[] {
-  const seen = new Set<string>();
   const out: DetectedCloze[] = [];
   for (const list of lists) {
     for (const c of list) {
-      const key = `${c.pageIndex}:${Math.round(c.bbox.x)}:${Math.round(c.bbox.y)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(c);
+      const dup = out.some(
+        (o) =>
+          o.pageIndex === c.pageIndex &&
+          c.bbox.x < o.bbox.x + o.bbox.w &&
+          c.bbox.x + c.bbox.w > o.bbox.x &&
+          c.bbox.y < o.bbox.y + o.bbox.h &&
+          c.bbox.y + c.bbox.h > o.bbox.y,
+      );
+      if (!dup) out.push(c);
     }
   }
   return out;
@@ -164,7 +169,9 @@ export function ImportWizard() {
           lists.push(r.clozes);
           if (!base) base = r;
         }
-        setPhase({ k: "ready", result: { ...base!, clozes: mergeClozes(lists) }, blob });
+        // Single color (incl. 自動): use the detection AS-IS (identical to before — no merge step).
+        const clozes = configs.length > 1 ? mergeClozes(lists) : lists[0];
+        setPhase({ k: "ready", result: { ...base!, clozes }, blob });
       } catch (e) {
         if (e instanceof CancelledError) setPhase({ k: "configuring", blob });
         else setPhase({ k: "error", ...describeError(e) });
