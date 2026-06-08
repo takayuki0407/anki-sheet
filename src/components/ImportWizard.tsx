@@ -19,14 +19,13 @@ import {
   DEFAULT_MAGENTA_BAND,
   type ColorPreset,
   type DeckColorConfig,
-  type DetectedCloze,
 } from "../types";
 
 type Phase =
   | { k: "idle" }
-  | { k: "configuring"; blob: Blob } // choose the answer color(s) before detecting
+  | { k: "configuring"; blob: Blob } // choose the answer color before detecting
   | { k: "probing" }
-  | { k: "detecting"; color: number; colors: number; page: number; total: number; found: number }
+  | { k: "detecting"; page: number; total: number; found: number }
   | { k: "ready"; result: PdfDetectionResult; blob: Blob }
   | { k: "saving" }
   | { k: "overlimit"; pending: PendingImport }
@@ -58,36 +57,15 @@ const presetToConfig = (p: ColorPreset): DeckColorConfig => ({
   hueTol: p.hueTol,
 });
 
-// Merge clozes from several single-color passes, dropping ONLY true duplicates (an answer two
-// colors both matched) — kept unless an already-kept cloze on the same page actually OVERLAPS it.
-// Distinct answers never overlap, so none are lost. (Only used when 2+ colors are selected.)
-function mergeClozes(lists: DetectedCloze[][]): DetectedCloze[] {
-  const out: DetectedCloze[] = [];
-  for (const list of lists) {
-    for (const c of list) {
-      const dup = out.some(
-        (o) =>
-          o.pageIndex === c.pageIndex &&
-          c.bbox.x < o.bbox.x + o.bbox.w &&
-          c.bbox.x + c.bbox.w > o.bbox.x &&
-          c.bbox.y < o.bbox.y + o.bbox.h &&
-          c.bbox.y + c.bbox.h > o.bbox.y,
-      );
-      if (!dup) out.push(c);
-    }
-  }
-  return out;
-}
-
 export function ImportWizard() {
   const setView = useApp((s) => s.setView);
   const [phase, setPhase] = useState<Phase>({ k: "idle" });
   const [name, setName] = useState("");
   const [copied, setCopied] = useState(false);
   // Answer-color choice made BEFORE detecting (the user picks; we no longer silently auto-detect):
-  // 自動 (probe + pick one) OR one-or-more manual presets (union of their detections).
+  // 自動 (probe + pick one) OR a single manual preset.
   const [useAuto, setUseAuto] = useState(true);
-  const [manualKeys, setManualKeys] = useState<Set<string>>(new Set(["red"]));
+  const [manualKey, setManualKey] = useState("red");
   const colorRef = useRef<DeckColorConfig>(DEFAULT_MAGENTA_BAND); // primary color saved on the deck
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -137,41 +115,29 @@ export function ImportWizard() {
     setPhase({ k: "configuring", blob: file.slice(0, file.size, "application/pdf") });
   }, []);
 
-  // Run detection for the chosen color(s): 自動 probes one color; manual unions each selected color
-  // (one pass per color — single-color PDFs run once). Cancel returns to the color chooser.
+  // Run detection for the chosen color: 自動 probes + picks one; manual uses the selected preset.
+  // Cancel returns to the color chooser.
   const runDetect = useCallback(
     async (blob: Blob) => {
       const controller = new AbortController();
       abortRef.current = controller;
       try {
-        let configs: DeckColorConfig[];
+        let cfg: DeckColorConfig;
         if (useAuto) {
           setPhase({ k: "probing" });
-          configs = [await autoDetectColorConfig(blob, controller.signal)];
+          cfg = await autoDetectColorConfig(blob, controller.signal);
         } else {
-          configs = [...manualKeys]
-            .map((k) => COLOR_PRESETS.find((p) => p.key === k))
-            .filter((p): p is ColorPreset => !!p)
-            .map(presetToConfig);
-          if (!configs.length) configs = [DEFAULT_MAGENTA_BAND];
+          const p = COLOR_PRESETS.find((x) => x.key === manualKey);
+          cfg = p ? presetToConfig(p) : DEFAULT_MAGENTA_BAND;
         }
-        colorRef.current = configs[0];
-        const lists: DetectedCloze[][] = [];
-        let base: PdfDetectionResult | null = null;
-        for (let i = 0; i < configs.length; i++) {
-          const r = await detectClozesInPdf(
-            blob,
-            configs[i],
-            (page, total, found) =>
-              setPhase({ k: "detecting", color: i + 1, colors: configs.length, page, total, found }),
-            controller.signal,
-          );
-          lists.push(r.clozes);
-          if (!base) base = r;
-        }
-        // Single color (incl. 自動): use the detection AS-IS (identical to before — no merge step).
-        const clozes = configs.length > 1 ? mergeClozes(lists) : lists[0];
-        setPhase({ k: "ready", result: { ...base!, clozes }, blob });
+        colorRef.current = cfg;
+        const result = await detectClozesInPdf(
+          blob,
+          cfg,
+          (page, total, found) => setPhase({ k: "detecting", page, total, found }),
+          controller.signal,
+        );
+        setPhase({ k: "ready", result, blob });
       } catch (e) {
         if (e instanceof CancelledError) setPhase({ k: "configuring", blob });
         else setPhase({ k: "error", ...describeError(e) });
@@ -179,19 +145,8 @@ export function ImportWizard() {
         abortRef.current = null;
       }
     },
-    [useAuto, manualKeys],
+    [useAuto, manualKey],
   );
-
-  const toggleManual = (key: string) => {
-    setUseAuto(false);
-    setManualKeys((s) => {
-      const n = new Set(s);
-      if (n.has(key)) n.delete(key);
-      else n.add(key);
-      if (!n.size) n.add(key); // keep at least one manual color selected
-      return n;
-    });
-  };
 
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -259,11 +214,11 @@ export function ImportWizard() {
     }
   };
 
-  // Answer-color chooser: 自動 + the presets (manual is multi-select). Shared by the configure
-  // screen and the result screen (change colors → re-detect).
+  // Answer-color chooser: 自動 + the presets (single-select). Shared by the configure screen and
+  // the result screen (change color → re-detect).
   const colorChooser = (
     <div className="import-color">
-      <span className="import-color-label">答えの色（複数選択できます）</span>
+      <span className="import-color-label">答えの色</span>
       <div className="preset-row">
         <button
           className={`btn sm ${useAuto ? "primary" : ""}`}
@@ -274,15 +229,18 @@ export function ImportWizard() {
         {COLOR_PRESETS.map((p) => (
           <button
             key={p.key}
-            className={`btn sm ${!useAuto && manualKeys.has(p.key) ? "primary" : ""}`}
-            onClick={() => toggleManual(p.key)}
+            className={`btn sm ${!useAuto && manualKey === p.key ? "primary" : ""}`}
+            onClick={() => {
+              setUseAuto(false);
+              setManualKey(p.key);
+            }}
           >
             {p.label}
           </button>
         ))}
       </div>
       <p className="muted small">
-        自動はシステムが答えの色を判定します。色を選ぶと、選んだ色（複数可）で検出します。
+        自動はシステムが答えの色を判定します。手動で色を選ぶこともできます。
       </p>
     </div>
   );
@@ -306,7 +264,7 @@ export function ImportWizard() {
           <p className="dz-big">赤シート対応のPDFをドロップ</p>
           <p className="dz-sub">またはクリックして選択</p>
           <p className="dz-note">
-            次の画面で答えの色（自動／赤・マゼンタなど、複数可）を選んで検出します。
+            次の画面で答えの色（自動／赤・マゼンタなど）を選んで検出します。
             解析はこの端末内で行われます（クラウド同期を使う場合のみ、Proでアカウントに保存）。
           </p>
           <input ref={inputRef} type="file" accept="application/pdf" hidden onChange={onPick} />
@@ -340,10 +298,7 @@ export function ImportWizard() {
 
       {phase.k === "detecting" && (
         <div className="progress-box">
-          <p>
-            解析中… ページ {phase.page}/{phase.total || "?"}
-            {phase.colors > 1 ? `（色 ${phase.color}/${phase.colors}）` : ""}
-          </p>
+          <p>解析中… ページ {phase.page}/{phase.total || "?"}</p>
           <div className="bar">
             <div
               className="bar-fill"
