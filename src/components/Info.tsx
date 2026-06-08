@@ -5,7 +5,6 @@ import { useApp } from "../store/session";
 import { deleteAccount, signOutUser, useAuth } from "../auth/useAuth";
 import { listBooks, type AccountBooks } from "../sync/api";
 import { clearAllLocalData } from "../db/backup";
-import { releaseLocalSlotsOnLogout } from "../sync/deck";
 
 const SUPPORT_EMAIL = "zabieru.0407@gmail.com";
 
@@ -63,14 +62,12 @@ export function Info() {
   const onSignOut = async () => {
     if (
       !window.confirm(
-        "ログアウトすると、この端末に保存されている本はすべて削除されます（Proでクラウドに保存済みの本は再ログインで取得できます）。よろしいですか？",
+        "ログアウトしてもこの端末の本は保持されますが、サインインするまで開けなくなります。",
       )
     )
       return;
-    await releaseLocalSlotsOnLogout(); // free Standard slots while the token is still valid
-    await signOutUser();
-    await clearAllLocalData();
-    setView({ name: "decks" }); // empty bookshelf, signed out
+    await signOutUser(); // keep local data; the sign-in gate locks it until re-login
+    setView({ name: "decks" });
   };
 
   const onDeleteAccount = async () => {

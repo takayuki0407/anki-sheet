@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useApp } from "./store/session";
 import { requestPersistentStorage } from "./db/backup";
-import { initAuth } from "./auth/useAuth";
+import { initAuth, useAuth } from "./auth/useAuth";
 import { Home } from "./components/Home";
 import { Service } from "./components/Service";
 import { Pricing } from "./components/Pricing";
@@ -25,9 +25,14 @@ const MARKETING = new Set(["home", "service", "pricing"]);
 // billing exists. The /api/* sync backend (Pages Functions) is separate and always served.
 const PRIVATE = import.meta.env.VITE_PUBLIC !== "true";
 
+// App pages (vs marketing/login/info) require sign-in.
+const APP_VIEWS = new Set(["decks", "import", "viewer", "settings"]);
+
 export function App() {
   const view = useApp((s) => s.view);
   const setView = useApp((s) => s.setView);
+  const user = useAuth((s) => s.user);
+  const authReady = useAuth((s) => s.ready);
   useEffect(() => {
     if (PRIVATE) return; // don't start auth/storage on the coming-soon page
     void requestPersistentStorage();
@@ -35,6 +40,8 @@ export function App() {
   }, []);
   if (PRIVATE) return <ComingSoon />;
   const isMarketing = MARKETING.has(view.name);
+  // Sign-in REQUIRED for the app pages (the bookshelf can't be used without an account).
+  const needsLogin = APP_VIEWS.has(view.name) && authReady && !user;
   // The reader is full-screen: no app chrome above the page, maximizing vertical reading space.
   // The viewer renders its own back / controls row.
   const isViewer = view.name === "viewer";
@@ -56,15 +63,21 @@ export function App() {
         </header>
       )}
       <main className="content">
-        {view.name === "home" && <Home />}
-        {view.name === "service" && <Service />}
-        {view.name === "pricing" && <Pricing />}
-        {view.name === "decks" && <DeckList />}
-        {view.name === "import" && <ImportWizard />}
-        {view.name === "viewer" && <PageViewer deckId={view.deckId} />}
-        {view.name === "settings" && <Settings deckId={view.deckId} />}
-        {view.name === "info" && <Info />}
-        {view.name === "login" && <Login />}
+        {needsLogin ? (
+          <Login />
+        ) : (
+          <>
+            {view.name === "home" && <Home />}
+            {view.name === "service" && <Service />}
+            {view.name === "pricing" && <Pricing />}
+            {view.name === "decks" && <DeckList />}
+            {view.name === "import" && <ImportWizard />}
+            {view.name === "viewer" && <PageViewer deckId={view.deckId} />}
+            {view.name === "settings" && <Settings deckId={view.deckId} />}
+            {view.name === "info" && <Info />}
+            {view.name === "login" && <Login />}
+          </>
+        )}
       </main>
       {isMarketing && <SiteFooter />}
     </div>

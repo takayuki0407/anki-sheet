@@ -15,6 +15,7 @@ import {
 } from "firebase/auth";
 import { getFirebaseAuth } from "./firebase";
 import { deleteAccountData } from "../sync/api";
+import { clearAllLocalData } from "../db/backup";
 
 interface AuthState {
   user: User | null;
@@ -33,7 +34,18 @@ let started = false;
 export function initAuth(): void {
   if (started) return;
   started = true;
-  onAuthStateChanged(getFirebaseAuth(), (user) => useAuth.getState().set({ user, ready: true }));
+  onAuthStateChanged(getFirebaseAuth(), (user) => {
+    useAuth.getState().set({ user, ready: true });
+    // Different-account guard: if a DIFFERENT account signs in on this device, wipe the previous
+    // account's local data. Same account / first sign-in keeps it. Sign-out keeps it (gate locks).
+    if (user) {
+      void (async () => {
+        const prev = localStorage.getItem("ownerUid");
+        if (prev && prev !== user.uid) await clearAllLocalData();
+        localStorage.setItem("ownerUid", user.uid);
+      })();
+    }
+  });
 }
 
 export const signIn = (email: string, password: string) =>
