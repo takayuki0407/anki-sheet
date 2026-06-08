@@ -1,5 +1,10 @@
 import { useCallback, useRef, useState } from "react";
-import { CancelledError, detectClozesInPdf, type PdfDetectionResult } from "../pdf/pdfEngine";
+import {
+  autoDetectColorConfig,
+  CancelledError,
+  detectClozesInPdf,
+  type PdfDetectionResult,
+} from "../pdf/pdfEngine";
 import { importBookmarks, importDeck } from "../db/repo";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
@@ -15,6 +20,7 @@ import {
 
 type Phase =
   | { k: "idle" }
+  | { k: "probing" }
   | { k: "detecting"; page: number; total: number; found: number }
   | { k: "ready"; result: PdfDetectionResult; blob: Blob }
   | { k: "saving" }
@@ -54,11 +60,19 @@ export function ImportWizard() {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const detect = useCallback(async (blob: Blob) => {
+  // `auto` (first import): probe a few pages to pick the answer color automatically before the full
+  // detect. Re-detect from the ready screen passes auto=false (use the color the user chose).
+  const detect = useCallback(async (blob: Blob, auto = false) => {
     const controller = new AbortController();
     abortRef.current = controller;
-    setPhase({ k: "detecting", page: 0, total: 0, found: 0 });
     try {
+      if (auto) {
+        setPhase({ k: "probing" });
+        const cfg = await autoDetectColorConfig(blob, controller.signal);
+        setColor(cfg);
+        colorRef.current = cfg;
+      }
+      setPhase({ k: "detecting", page: 0, total: 0, found: 0 });
       const result = await detectClozesInPdf(
         blob,
         colorRef.current,
@@ -85,7 +99,7 @@ export function ImportWizard() {
         return;
       }
       setName(file.name.replace(/\.pdf$/i, ""));
-      await detect(file.slice(0, file.size, "application/pdf"));
+      await detect(file.slice(0, file.size, "application/pdf"), true); // first import → auto color
     },
     [detect],
   );
@@ -171,42 +185,30 @@ export function ImportWizard() {
       </div>
 
       {phase.k === "idle" && (
-        <>
-          <div className="import-color">
-            <span className="import-color-label">答えの色（隠したい文字の色）</span>
-            <div className="preset-row">
-              {COLOR_PRESETS.map((p) => (
-                <button
-                  key={p.key}
-                  className={`btn sm ${presetActive(p) ? "primary" : ""}`}
-                  onClick={() => pickPreset(p)}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div
-            className="dropzone"
-            onClick={() => inputRef.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={onDrop}
-          >
-            <p className="dz-big">赤シート対応のPDFをドロップ</p>
-            <p className="dz-sub">またはクリックして選択</p>
-            <p className="dz-note">
-              選んだ色の語句を自動で検出し、暗記カードにします。
-              解析はこの端末内で行われます（クラウド同期を使う場合のみ、Proでアカウントに保存）。
-            </p>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="application/pdf"
-              hidden
-              onChange={onPick}
-            />
-          </div>
-        </>
+        <div
+          className="dropzone"
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={onDrop}
+        >
+          <p className="dz-big">赤シート対応のPDFをドロップ</p>
+          <p className="dz-sub">またはクリックして選択</p>
+          <p className="dz-note">
+            答えの色は自動で判定して語句を検出します（検出後に色を変えて再検出もできます）。
+            解析はこの端末内で行われます（クラウド同期を使う場合のみ、Proでアカウントに保存）。
+          </p>
+          <input ref={inputRef} type="file" accept="application/pdf" hidden onChange={onPick} />
+        </div>
+      )}
+
+      {phase.k === "probing" && (
+        <div className="progress-box">
+          <p>答えの色を判定しています…</p>
+          <p className="muted">最適な色を選んでから検出します</p>
+          <button className="btn ghost" onClick={() => abortRef.current?.abort()}>
+            中止
+          </button>
+        </div>
       )}
 
       {phase.k === "detecting" && (
