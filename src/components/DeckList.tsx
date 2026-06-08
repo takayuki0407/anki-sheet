@@ -13,7 +13,13 @@ import { renderCover } from "../pdf/pdfEngine";
 import { downloadBlob, exportBackup, importBackup } from "../db/backup";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
-import { listBooks, unregisterBook, updateBookMeta, type AccountBook } from "../sync/api";
+import {
+  listBooks,
+  syncErrorMessage,
+  unregisterBook,
+  updateBookMeta,
+  type AccountBook,
+} from "../sync/api";
 import { downloadDeck } from "../sync/deck";
 import type { DeckRow } from "../types";
 
@@ -235,14 +241,14 @@ export function DeckList() {
 /** A book that exists in the account but not on this device — one tap downloads + rebuilds it. */
 function CloudBook({ book }: { book: AccountBook }) {
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
   const download = async () => {
     setBusy(true);
-    setErr(false);
+    setErrMsg(null);
     try {
       await downloadDeck(book); // on success the local deck appears (live query) → this row unmounts
-    } catch {
-      setErr(true);
+    } catch (e) {
+      setErrMsg(syncErrorMessage(e));
       setBusy(false);
     }
   };
@@ -251,8 +257,9 @@ function CloudBook({ book }: { book: AccountBook }) {
       <span className="cloud-name">{book.name || "（無題）"}</span>
       <span className="cloud-device">{book.device ?? ""}</span>
       <button className="btn sm" onClick={download} disabled={busy}>
-        {busy ? "取り込み中…" : err ? "再試行" : "この端末に取り込む"}
+        {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
       </button>
+      {errMsg && <p className="cloud-error">{errMsg}</p>}
     </li>
   );
 }
