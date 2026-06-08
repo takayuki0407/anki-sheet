@@ -1,6 +1,7 @@
 // Landing Home — concise hero + a few highlights + CTA. The detailed product explanation lives
 // on the Service page; the nav/footer are rendered by App around all marketing pages.
 import { useApp } from "../store/session";
+import { Demo } from "./Demo";
 
 const HIGHLIGHTS = [
   { emoji: "🎯", title: "自動で答えを検出", body: "色を見分けて答えの部分だけを隠します。手作業の塗りつぶしは不要。" },
@@ -35,6 +36,14 @@ export function Home() {
           </div>
           <p className="hero-note">ブラウザで今すぐ・登録不要</p>
         </div>
+      </section>
+
+      <section className="demo-section">
+        <h2 className="demo-heading">タップして、赤シートを体験</h2>
+        <Demo />
+        <p className="demo-note">
+          実際はPDFを取り込むと、色付きの答えが自動でこの状態になります。
+        </p>
       </section>
 
       <section className="features">
