@@ -1,10 +1,13 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   autoDetectColorConfig,
   CancelledError,
   detectClozesInPdf,
+  loadPdf,
   type PdfDetectionResult,
 } from "../pdf/pdfEngine";
+import { PageOverlay } from "../render/PageOverlay";
 import { importBookmarks, importDeck } from "../db/repo";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
@@ -83,6 +86,38 @@ export function ImportWizard() {
   const colorRef = useRef<DeckColorConfig>(DEFAULT_MAGENTA_BAND); // primary color saved on the deck
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Result-screen preview: load the PDF once we have a result so the user can flip through ANY page
+  // and check the detection (no auto-jump). Non-essential — a load failure is silently ignored.
+  const [previewPage, setPreviewPage] = useState(0);
+  const [previewDoc, setPreviewDoc] = useState<PDFDocumentProxy | null>(null);
+  const docRef = useRef<PDFDocumentProxy | null>(null);
+  const readyBlob = phase.k === "ready" ? phase.blob : null;
+  useEffect(() => {
+    if (!readyBlob) return;
+    let cancelled = false;
+    setPreviewPage(0);
+    setPreviewDoc(null);
+    (async () => {
+      try {
+        const doc = await loadPdf(readyBlob);
+        if (cancelled) {
+          void doc.loadingTask.destroy();
+          return;
+        }
+        docRef.current = doc;
+        setPreviewDoc(doc);
+      } catch {
+        /* preview is optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      const d = docRef.current;
+      docRef.current = null;
+      void d?.loadingTask.destroy();
+    };
+  }, [readyBlob]);
 
   const handleFile = useCallback((file: File) => {
     if (file.size > MAX_PDF_BYTES) {
@@ -326,6 +361,44 @@ export function ImportWizard() {
               PDFの目次 {phase.result.outline.length} 件もしおりに取り込みます
             </p>
           )}
+          {previewDoc &&
+            (() => {
+              const pageRects = phase.result.clozes
+                .filter((c) => c.pageIndex === previewPage)
+                .flatMap((c) => c.rects);
+              return (
+                <div className="tuner-preview">
+                  <div className="viewer-nav">
+                    <button
+                      className="btn sm"
+                      disabled={previewPage <= 0}
+                      onClick={() => setPreviewPage((p) => Math.max(0, p - 1))}
+                    >
+                      ← 前
+                    </button>
+                    <span className="muted">
+                      p.{previewPage + 1}/{phase.result.pageCount} ・ 検出 {pageRects.length} 個
+                    </span>
+                    <button
+                      className="btn sm"
+                      disabled={previewPage >= phase.result.pageCount - 1}
+                      onClick={() =>
+                        setPreviewPage((p) => Math.min(phase.result.pageCount - 1, p + 1))
+                      }
+                    >
+                      次 →
+                    </button>
+                  </div>
+                  <PageOverlay
+                    doc={previewDoc}
+                    pageIndex={previewPage}
+                    pageW={phase.result.pageW}
+                    highlightRects={pageRects}
+                    maxWidth={520}
+                  />
+                </div>
+              );
+            })()}
           {colorChooser}
           <button className="btn sm" onClick={() => void runDetect(phase.blob)}>
             この色で再検出
