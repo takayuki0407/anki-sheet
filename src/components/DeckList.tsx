@@ -237,11 +237,16 @@ export function DeckList() {
           <p className="muted small">
             {cloudPro
               ? "同じアカウントで取り込んだ本です。タップでこの端末に取り込めます。"
-              : "クラウドからの取得はProプラン限定です（Standardプランはクラウド保存なし）。"}
+              : "Standardプランはクラウドにファイルを保存しません。これらはアカウントに登録された枠で、取得はできません。不要なら削除して枠を空けられます。"}
           </p>
           <ul className="cloud-list">
             {remote.map((b) => (
-              <CloudBook key={b.book_id} book={b} pro={cloudPro} />
+              <CloudBook
+                key={b.book_id}
+                book={b}
+                pro={cloudPro}
+                onRemoved={(id) => setCloud((c) => (c ? c.filter((x) => x.book_id !== id) : c))}
+              />
             ))}
           </ul>
         </div>
@@ -251,7 +256,15 @@ export function DeckList() {
 }
 
 /** A book that exists in the account but not on this device — one tap downloads + rebuilds it. */
-function CloudBook({ book, pro }: { book: AccountBook; pro: boolean }) {
+function CloudBook({
+  book,
+  pro,
+  onRemoved,
+}: {
+  book: AccountBook;
+  pro: boolean;
+  onRemoved: (id: string) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const download = async () => {
@@ -259,6 +272,19 @@ function CloudBook({ book, pro }: { book: AccountBook; pro: boolean }) {
     setErrMsg(null);
     try {
       await downloadDeck(book); // on success the local deck appears (live query) → this row unmounts
+    } catch (e) {
+      setErrMsg(syncErrorMessage(e));
+      setBusy(false);
+    }
+  };
+  // Standard: the book is only a registered slot (no cloud file) → can't download, but can be
+  // released to free the account-global count.
+  const remove = async () => {
+    setBusy(true);
+    setErrMsg(null);
+    try {
+      await unregisterBook(book.book_id);
+      onRemoved(book.book_id);
     } catch (e) {
       setErrMsg(syncErrorMessage(e));
       setBusy(false);
@@ -273,7 +299,9 @@ function CloudBook({ book, pro }: { book: AccountBook; pro: boolean }) {
           {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
         </button>
       ) : (
-        <span className="cloud-locked">Pro限定</span>
+        <button className="btn ghost sm" onClick={remove} disabled={busy}>
+          {busy ? "削除中…" : "アカウントから削除"}
+        </button>
       )}
       {errMsg && <p className="cloud-error">{errMsg}</p>}
     </li>
