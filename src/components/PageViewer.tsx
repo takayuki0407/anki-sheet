@@ -550,6 +550,8 @@ export function PageViewer({ deckId }: { deckId: number }) {
         </button>
         <button
           className="btn ghost sm"
+          disabled={editMode}
+          title={editMode ? "編集中は横読み固定です" : undefined}
           onClick={() => setMode((m) => (m === "paged" ? "scroll" : "paged"))}
         >
           {mode === "paged" ? "縦読み" : "横読み"}
