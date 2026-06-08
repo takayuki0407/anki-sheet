@@ -1848,3 +1848,30 @@ body {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* ---- Device name field (Info) ---- */
+.device-name-field {
+  margin: 12px 0;
+}
+.device-name-field > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.device-name-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.device-name-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+}

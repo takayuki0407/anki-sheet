@@ -10,7 +10,7 @@ import { json, type Fn } from "../../../_lib/types";
 export const onRequestPatch: Fn = async (ctx) => {
   const uid = ctx.data.uid!;
   const bookId = ctx.params.bookId;
-  let body: { favorite?: boolean; opened_at?: number };
+  let body: { favorite?: boolean; opened_at?: number; device?: string };
   try {
     body = (await ctx.request.json()) as typeof body;
   } catch {
@@ -25,6 +25,12 @@ export const onRequestPatch: Fn = async (ctx) => {
   if (typeof body.opened_at === "number" && body.opened_at > 0) {
     sets.push("opened_at = MAX(opened_at, ?)");
     binds.push(body.opened_at);
+  }
+  // The device that currently HOLDS the book stamps its (user-editable) name here — on download and
+  // on rename — so the cloud list shows where a book is now, not just who first imported it.
+  if (typeof body.device === "string" && body.device.trim()) {
+    sets.push("device = ?");
+    binds.push(body.device.trim());
   }
   if (!sets.length) return json({ ok: true });
   binds.push(uid, bookId);

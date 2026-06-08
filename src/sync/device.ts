@@ -1,7 +1,12 @@
-// A friendly label for the current device, sent with each book registration and shown in the
-// account's over-limit chooser so the user can tell which device imported each book. (The native
-// iOS app will send "iPhone" / "iPad" instead.)
-export function deviceLabel(): string {
+// A user-editable, friendly name for THIS device, sent with each book registration / cloud sync and
+// shown in the account's cloud list so you can tell which device holds each book.
+//
+// Browsers CANNOT read the real computer name (e.g. "DESKTOP-8OFFRJ5") — there is no such web API
+// (privacy). So we default to a platform label (browser / OS) and let the user override it with
+// their own name in 情報・ヘルプ. The custom name is stored per-browser in localStorage.
+const KEY = "deviceName";
+
+function autoLabel(): string {
   const ua = navigator.userAgent;
   const os = /Windows/.test(ua)
     ? "Windows"
@@ -28,4 +33,21 @@ export function deviceLabel(): string {
             ? "Safari"
             : "ブラウザ";
   return `Web · ${browser} / ${os}`;
+}
+
+/** The user's custom device name, or the auto platform label when unset. */
+export function getDeviceName(): string {
+  return localStorage.getItem(KEY)?.trim() || autoLabel();
+}
+
+/** Save (or clear, when blank → revert to the auto label) the custom device name. */
+export function setDeviceName(name: string): void {
+  const v = name.trim();
+  if (v) localStorage.setItem(KEY, v);
+  else localStorage.removeItem(KEY);
+}
+
+/** The label sent to the backend for this device. */
+export function deviceLabel(): string {
+  return getDeviceName();
 }

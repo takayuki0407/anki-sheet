@@ -21,6 +21,7 @@ import {
   type AccountBook,
 } from "../sync/api";
 import { backfillCloudIfPro, downloadDeck } from "../sync/deck";
+import { deviceLabel } from "../sync/device";
 import type { DeckRow } from "../types";
 
 function dateStamp(): string {
@@ -263,6 +264,9 @@ function CloudBook({ book, onRemoved }: { book: AccountBook; onRemoved: (bookId:
     setErrMsg(null);
     try {
       await downloadDeck(book); // on success the local deck appears (live query) → this row unmounts
+      // Stamp THIS device as the current holder so the cloud list (on other devices) shows where the
+      // book is now, not just who first imported it.
+      void updateBookMeta(book.book_id, { device: deviceLabel() }).catch(() => {});
     } catch (e) {
       setErrMsg(syncErrorMessage(e));
       setBusy(false);

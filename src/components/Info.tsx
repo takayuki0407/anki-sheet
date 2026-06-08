@@ -5,6 +5,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useApp } from "../store/session";
 import { deleteAccount, signOutUser, useAuth } from "../auth/useAuth";
 import { listBooks, type AccountBooks } from "../sync/api";
+import { getDeviceName, setDeviceName } from "../sync/device";
+import { applyDeviceNameToLocalBooks } from "../sync/deck";
 import { listDecks } from "../db/repo";
 import { clearAllLocalData } from "../db/backup";
 import { DevTierSwitch } from "./DevTierSwitch";
@@ -65,6 +67,23 @@ export function Info() {
   const [delPw, setDelPw] = useState("");
   const [delBusy, setDelBusy] = useState(false);
   const [delMsg, setDelMsg] = useState("");
+  const [deviceName, setDeviceNameInput] = useState(getDeviceName());
+  const [devSaving, setDevSaving] = useState(false);
+  const [devSaved, setDevSaved] = useState(false);
+
+  const onSaveDeviceName = async () => {
+    setDevSaving(true);
+    setDeviceName(deviceName); // persist locally (used for future registrations / cloud sync)
+    try {
+      await applyDeviceNameToLocalBooks(); // re-stamp this device's cloud books with the new name
+      setDevSaved(true);
+      setTimeout(() => setDevSaved(false), 2000);
+    } catch {
+      /* best-effort — the name is saved locally regardless */
+    } finally {
+      setDevSaving(false);
+    }
+  };
 
   const onSignOut = async () => {
     if (
@@ -161,6 +180,25 @@ export function Info() {
                 同じアカウントで iOSアプリ にもログインできます。Proでは端末・プラットフォーム間で
                 クラウド同期されます。
               </p>
+              <div className="device-name-field">
+                <label htmlFor="device-name">この端末の名前</label>
+                <div className="device-name-row">
+                  <input
+                    id="device-name"
+                    className="device-name-input"
+                    value={deviceName}
+                    onChange={(e) => setDeviceNameInput(e.target.value)}
+                    placeholder="例：DESKTOP-8OFFRJ5"
+                  />
+                  <button className="btn sm" disabled={devSaving} onClick={() => void onSaveDeviceName()}>
+                    {devSaved ? "✓ 保存しました" : devSaving ? "保存中…" : "保存"}
+                  </button>
+                </div>
+                <p className="muted small">
+                  クラウドの本一覧に表示される、この端末の名前です。ブラウザは実際のPC名を取得できないため
+                  自由に設定できます（空欄にすると自動名に戻ります）。
+                </p>
+              </div>
               <button className="btn ghost sm" onClick={() => void onSignOut()}>
                 ログアウト
               </button>

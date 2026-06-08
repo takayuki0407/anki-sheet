@@ -19,8 +19,10 @@ import {
   putBlob,
   putContent,
   unregisterBook,
+  updateBookMeta,
   type AccountBook,
 } from "./api";
+import { deviceLabel } from "./device";
 import type { DeckColorConfig, DetectedCloze } from "../types";
 
 interface DeckContent {
@@ -70,6 +72,26 @@ export async function backfillCloudIfPro(): Promise<void> {
     if (!d.id || !d.bookId) continue; // not registered (registered on import) → skip
     if ((size.get(d.bookId) ?? 0) > 0) continue; // already has a cloud file
     await uploadDeck(d.bookId, d.id).catch(() => {});
+  }
+}
+
+/** Stamp THIS device's current name on every book it holds locally (in the account registry), so the
+ * cloud list shows where a book is NOW — not just who first imported it. Called after the user
+ * renames this device; only touches rows whose label differs. Best-effort; never throws. */
+export async function applyDeviceNameToLocalBooks(): Promise<void> {
+  const me = deviceLabel();
+  let acct;
+  try {
+    acct = await listBooks();
+  } catch {
+    return;
+  }
+  const localIds = new Set(
+    (await listDecks()).map((d) => d.bookId).filter(Boolean) as string[],
+  );
+  for (const b of acct.books) {
+    if (localIds.has(b.book_id) && b.device !== me)
+      await updateBookMeta(b.book_id, { device: me }).catch(() => {});
   }
 }
 
