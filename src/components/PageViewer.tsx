@@ -19,6 +19,7 @@ import { ContinuousView } from "./ContinuousView";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
 import { getProgress, putProgress } from "../sync/api";
+import { refreshContent, uploadContent } from "../sync/deck";
 import type { BookmarkRow, CardRow, PdfRow, Rect } from "../types";
 
 type Status = "loading" | "ready" | "error";
@@ -237,6 +238,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
             void updateDeck(deckId, { ...c, progressAt: cloud.updatedAt });
           }
         }
+        // Pro: pull newer masks from the cloud (last-write-wins; fail-open). Replaces cards in Dexie,
+        // so the allCards live query re-renders the viewer with masks added/removed on another device.
+        if (useAuth.getState().user && d.bookId) await refreshContent(deckId).catch(() => {});
+        if (cancelled) return;
         setDocReady(true);
         setStatus("ready");
       } catch (e) {
@@ -505,6 +510,12 @@ export function PageViewer({ deckId }: { deckId: number }) {
     if (pdf?.id != null) {
       for (const id of editDels) await deleteCard(id);
       for (const a of editAdds) await addCard(deckId, pdf.id, a.pageIndex, a.rect);
+      // Pro: re-sync the content JSON so added/removed masks reach the user's other devices
+      // (best-effort, fail-open; the PDF is unchanged so no blob re-upload).
+      if (useAuth.getState().user) {
+        const d = await getDeck(deckId);
+        if (d?.bookId) void uploadContent(d.bookId, deckId).catch(() => {});
+      }
     }
     discardEdits();
     setEditMode(false);

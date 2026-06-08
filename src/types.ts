@@ -74,6 +74,8 @@ export interface DeckRow {
   sheetBand?: { top: number; height: number };
   /** When the (cross-device-syncable) progress was last changed locally — for last-write-wins. */
   progressAt?: number;
+  /** When the deck CONTENT (masks/name/color) was last changed locally — content last-write-wins. */
+  contentAt?: number;
 }
 
 export interface PdfRow {

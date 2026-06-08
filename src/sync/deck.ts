@@ -1,7 +1,16 @@
 // Pro cloud sync of a whole deck = the PDF blob (R2 .pdf) + a content JSON (R2 .json) holding
 // everything needed to rebuild it WITHOUT re-detecting (name, color, geometry, clozes, bookmarks).
 // Upload on import; download + reconstruct on another device from the bookshelf's cloud section.
-import { deckCards, getDeck, getDeckPdf, importBookmarks, importDeck, listBookmarks } from "../db/repo";
+import {
+  deckCards,
+  getDeck,
+  getDeckPdf,
+  importBookmarks,
+  importDeck,
+  listBookmarks,
+  redetectDeck,
+  updateDeck,
+} from "../db/repo";
 import { getBlob, getContent, putBlob, putContent, type AccountBook } from "./api";
 import type { DeckColorConfig, DetectedCloze } from "../types";
 
@@ -13,17 +22,19 @@ interface DeckContent {
   pageH: number;
   clozes: DetectedCloze[];
   bookmarks: { title: string; pageIndex: number }[];
+  /** Local edit time of this content (epoch ms), set on upload — drives content last-write-wins. */
+  contentAt?: number;
 }
 
-/** Upload a local deck's PDF + content to the cloud (Pro). 403 (standard) is a silent no-op. */
-export async function uploadDeck(bookId: string, deckId: number): Promise<void> {
+/** Build the content JSON (everything needed to rebuild the deck except the PDF) from local state. */
+async function buildContent(deckId: number): Promise<{ content: DeckContent; blob: Blob } | null> {
   const [deck, pdf, cards, bms] = await Promise.all([
     getDeck(deckId),
     getDeckPdf(deckId),
     deckCards(deckId),
     listBookmarks(deckId),
   ]);
-  if (!deck || !pdf) return;
+  if (!deck || !pdf) return null;
   const content: DeckContent = {
     name: deck.name,
     color: deck.color,
@@ -38,8 +49,42 @@ export async function uploadDeck(bookId: string, deckId: number): Promise<void> 
     })),
     bookmarks: bms.map((b) => ({ title: b.title, pageIndex: b.pageIndex })),
   };
-  await putContent(bookId, JSON.stringify(content));
-  await putBlob(bookId, pdf.blob);
+  return { content, blob: pdf.blob };
+}
+
+/** Upload a local deck's PDF + content to the cloud (Pro). 403 (standard) is a silent no-op. */
+export async function uploadDeck(bookId: string, deckId: number): Promise<void> {
+  const built = await buildContent(deckId);
+  if (!built) return;
+  built.content.contentAt = Date.now();
+  await putContent(bookId, JSON.stringify(built.content));
+  await updateDeck(deckId, { contentAt: built.content.contentAt }); // record our own version
+  await putBlob(bookId, built.blob);
+}
+
+/** Re-sync ONLY the content JSON (masks/bookmarks/name/color), not the PDF blob. Use after editing
+ * masks or re-detecting — the PDF is unchanged, so the heavy blob upload is skipped. The download
+ * side rebuilds the whole clozes set, so added AND removed masks both propagate. Stamps contentAt so
+ * other devices pull it (and so this device doesn't re-pull its own write). */
+export async function uploadContent(bookId: string, deckId: number): Promise<void> {
+  const built = await buildContent(deckId);
+  if (!built) return;
+  built.content.contentAt = Date.now();
+  await putContent(bookId, JSON.stringify(built.content));
+  await updateDeck(deckId, { contentAt: built.content.contentAt });
+}
+
+/** Pull newer content from the cloud and replace local masks (last-write-wins). Returns true if it
+ * applied a newer version. Best-effort: callers wrap in catch so offline / signed-out keeps local. */
+export async function refreshContent(deckId: number): Promise<boolean> {
+  const deck = await getDeck(deckId);
+  if (!deck?.bookId) return false; // not a synced deck
+  const content = (await getContent(deck.bookId)) as DeckContent;
+  const cloudAt = content.contentAt ?? 0;
+  if (!cloudAt || cloudAt <= (deck.contentAt ?? 0)) return false; // local already current
+  await redetectDeck(deckId, content.color, content.clozes); // replace cards (+ color), transactional
+  await updateDeck(deckId, { name: content.name, contentAt: cloudAt });
+  return true;
 }
 
 /** Download an account book and reconstruct it locally. Returns the new local deckId. */
@@ -57,5 +102,6 @@ export async function downloadDeck(book: AccountBook): Promise<number> {
     clozes: content.clozes,
   });
   if (content.bookmarks?.length) await importBookmarks(deckId, content.bookmarks);
+  await updateDeck(deckId, { contentAt: content.contentAt ?? 0 }); // baseline so we don't re-pull it
   return deckId;
 }

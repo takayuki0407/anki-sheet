@@ -11,6 +11,8 @@ import {
   type PdfRow,
   type Rect,
 } from "../types";
+import { useAuth } from "../auth/useAuth";
+import { uploadContent } from "../sync/deck";
 
 type Status = "loading" | "ready" | "error";
 type Redetect =
@@ -112,6 +114,11 @@ export function Settings({ deckId }: { deckId: number }) {
       );
       const count = await redetectDeck(deckId, color, result.clozes);
       await updateDeck(deckId, { name: name.trim() || "無題のデッキ" });
+      // Pro: re-sync rebuilt masks to other devices (best-effort; PDF unchanged → content only).
+      if (useAuth.getState().user) {
+        const d = await getDeck(deckId);
+        if (d?.bookId) void uploadContent(d.bookId, deckId).catch(() => {});
+      }
       setRedetect({ k: "done", count });
     } catch (e) {
       setErrMsg(e instanceof Error ? e.message : String(e));
