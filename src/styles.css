@@ -486,6 +486,11 @@ body {
   border: 1.5px dashed #e23b3b;
   pointer-events: none;
 }
+/* 範囲削除 region: a distinct blue so it doesn't read as a new (red) mask. */
+.draw-rect-del {
+  background: rgba(37, 99, 235, 0.16);
+  border-color: #2563eb;
+}
 /* A revealed answer stays clickable so it can be hidden again (no hover emphasis). */
 .reveal-zone {
   position: absolute;

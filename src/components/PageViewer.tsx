@@ -35,6 +35,17 @@ interface Band {
   height: number;
 }
 
+/** A staged (not yet saved) manually-added mask. Negative tempId so it never collides with a card id. */
+interface EditAdd {
+  tempId: number;
+  pageIndex: number;
+  rect: Rect;
+}
+/** Do two page-coordinate rects overlap? (used by 範囲一括削除). */
+function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
 type RedMode = "mask" | "sheet" | "off";
 
 /**
@@ -144,9 +155,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
   // Manual mask editing (paged mode): tap a mask to delete it, drag to add one. Edits are STAGED
   // (added/removed in a local buffer) and only written to the DB on 保存; キャンセル discards them.
   const [editMode, setEditMode] = useState(false);
-  const [drawArm, setDrawArm] = useState(false);
-  const [editAdds, setEditAdds] = useState<{ tempId: number; pageIndex: number; rect: Rect }[]>([]);
+  const [drawMode, setDrawMode] = useState<"add" | "delete" | null>(null);
+  const [editAdds, setEditAdds] = useState<EditAdd[]>([]);
   const [editDels, setEditDels] = useState<Set<number>>(new Set());
+  const [history, setHistory] = useState<{ adds: EditAdd[]; dels: Set<number> }[]>([]);
   const tempIdRef = useRef(-1);
 
   useEffect(() => {
@@ -405,19 +417,45 @@ export function PageViewer({ deckId }: { deckId: number }) {
       .filter((a) => a.pageIndex === pageIndex)
       .map((a) => ({ id: a.tempId, rects: [a.rect] })),
   ];
-  const onAddMask = (rect: Rect) => {
-    setEditAdds((a) => [...a, { tempId: tempIdRef.current--, pageIndex, rect }]);
-    setDrawArm(false);
+  // Each edit pushes the current buffer onto the history stack first, so アンドゥ can restore it.
+  const applyEdit = (nextAdds: EditAdd[], nextDels: Set<number>) => {
+    setHistory((h) => [...h, { adds: editAdds, dels: editDels }]);
+    setEditAdds(nextAdds);
+    setEditDels(nextDels);
+  };
+  const undo = () => {
+    if (history.length === 0) return;
+    const prev = history[history.length - 1];
+    setEditAdds(prev.adds);
+    setEditDels(prev.dels);
+    setHistory(history.slice(0, -1));
   };
   const onDeleteMask = (id: string | number) => {
     const n = id as number;
-    if (n < 0) setEditAdds((a) => a.filter((x) => x.tempId !== n));
-    else setEditDels((s) => new Set(s).add(n));
+    if (n < 0) applyEdit(editAdds.filter((x) => x.tempId !== n), editDels);
+    else applyEdit(editAdds, new Set(editDels).add(n));
+  };
+  // The drawn rectangle (page coords): "add" → a new mask; "delete" → remove every mask (saved or
+  // staged) on this page that it overlaps (範囲一括削除).
+  const onDrawRect = (rect: Rect) => {
+    if (drawMode === "delete") {
+      const dels = new Set(editDels);
+      for (const c of currentCards) {
+        const rs = c.rects.length ? c.rects : [c.answerRect];
+        if (!editDels.has(c.id!) && rs.some((r) => rectsOverlap(r, rect))) dels.add(c.id!);
+      }
+      const adds = editAdds.filter((a) => !(a.pageIndex === pageIndex && rectsOverlap(a.rect, rect)));
+      applyEdit(adds, dels);
+    } else {
+      applyEdit([...editAdds, { tempId: tempIdRef.current--, pageIndex, rect }], editDels);
+    }
+    setDrawMode(null);
   };
   const discardEdits = () => {
     setEditAdds([]);
     setEditDels(new Set());
-    setDrawArm(false);
+    setHistory([]);
+    setDrawMode(null);
   };
   const saveEdit = async () => {
     if (pdf?.id != null) {
@@ -481,7 +519,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
               className="btn ghost sm"
               onClick={() => {
                 setEditMode(true);
-                setDrawArm(false);
+                setDrawMode(null);
                 setMode("paged"); // mask editing happens on the single paged view
               }}
             >
@@ -494,10 +532,22 @@ export function PageViewer({ deckId }: { deckId: number }) {
       {editMode && (
         <div className="edit-bar">
           <span className="muted small">
-            マスクをタップで削除／「マスク追加」を押してドラッグで囲むと追加（p.{pageIndex + 1}）
+            タップで個別削除／ドラッグで「追加」または「範囲削除」（p.{pageIndex + 1}）
           </span>
-          <button className={`btn sm ${drawArm ? "primary" : ""}`} onClick={() => setDrawArm((v) => !v)}>
-            {drawArm ? "囲んでください…（取消）" : "＋ マスク追加"}
+          <button
+            className={`btn sm ${drawMode === "add" ? "primary" : ""}`}
+            onClick={() => setDrawMode((m) => (m === "add" ? null : "add"))}
+          >
+            {drawMode === "add" ? "囲んでください…（取消）" : "＋ マスク追加"}
+          </button>
+          <button
+            className={`btn sm ${drawMode === "delete" ? "primary" : ""}`}
+            onClick={() => setDrawMode((m) => (m === "delete" ? null : "delete"))}
+          >
+            {drawMode === "delete" ? "囲んでください…（取消）" : "範囲削除"}
+          </button>
+          <button className="btn ghost sm" onClick={undo} disabled={history.length === 0}>
+            ↶ アンドゥ
           </button>
           <span className="edit-bar-spacer" />
           <button className="btn ghost sm" onClick={cancelEdit}>
@@ -524,8 +574,9 @@ export function PageViewer({ deckId }: { deckId: number }) {
           onPinchZoom={onPinchZoom}
           maxWidth={1600}
           editMode={editMode}
-          drawArm={drawArm}
-          onAddMask={onAddMask}
+          drawArm={drawMode !== null}
+          drawKind={drawMode ?? "add"}
+          onDrawRect={onDrawRect}
           onDeleteMask={onDeleteMask}
         />
       )}
