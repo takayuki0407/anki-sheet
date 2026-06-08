@@ -620,7 +620,6 @@ export function PageViewer({ deckId }: { deckId: number }) {
           onToggle={(id) => toggle(id as number)}
           fitMode={fitMode}
           zoom={zoom}
-          onTapZone={(dir) => goTo(pageIndex + dir)}
           onPinchZoom={onPinchZoom}
           maxWidth={1600}
           editMode={editMode}
