@@ -13,18 +13,26 @@ import { PageViewer } from "./components/PageViewer";
 import { Settings } from "./components/Settings";
 import { Info } from "./components/Info";
 import { Login } from "./components/Login";
+import { ComingSoon } from "./components/ComingSoon";
 
 // The marketing site (Home / Service / Pricing) gets the nav + footer chrome; the app pages
 // (bookshelf / viewer / …) get the minimal app topbar instead.
 const MARKETING = new Set(["home", "service", "pricing"]);
 
+// Not publicly launched yet: a production build with VITE_PRIVATE=true renders only a coming-soon
+// page (the app isn't freely usable before web billing exists). Preview builds keep the full app
+// for testing. The /api/* sync backend (Pages Functions) is separate and unaffected.
+const PRIVATE = import.meta.env.VITE_PRIVATE === "true";
+
 export function App() {
   const view = useApp((s) => s.view);
   const setView = useApp((s) => s.setView);
   useEffect(() => {
+    if (PRIVATE) return; // don't start auth/storage on the coming-soon page
     void requestPersistentStorage();
     initAuth(); // start the Firebase auth listener
   }, []);
+  if (PRIVATE) return <ComingSoon />;
   const isMarketing = MARKETING.has(view.name);
   // The reader is full-screen: no app chrome above the page, maximizing vertical reading space.
   // The viewer renders its own back / controls row.
