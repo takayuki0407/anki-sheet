@@ -59,6 +59,12 @@ export function Info() {
   const [delMsg, setDelMsg] = useState("");
 
   const onDeleteAccount = async () => {
+    if (
+      !window.confirm(
+        "本当にアカウントを削除しますか？\nクラウドに保存されたPDF・検出結果・進捗もすべて削除され、元に戻せません。",
+      )
+    )
+      return;
     setDelBusy(true);
     setDelMsg("");
     try {
