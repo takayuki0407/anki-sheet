@@ -1036,6 +1036,45 @@ body {
   margin: 2px 0;
 }
 
+/* Account deletion (danger zone) */
+.btn.danger {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
+  font-weight: 700;
+}
+.btn.danger:hover {
+  background: #a93226;
+  border-color: #a93226;
+  color: #fff;
+}
+.danger-zone {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.danger-link {
+  color: #c0392b;
+}
+.delete-account {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+.del-pw {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+}
+.del-actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* Account usage line + over-limit book chooser */
 .usage-line {
   font-size: 14px;

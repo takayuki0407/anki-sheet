@@ -92,6 +92,13 @@ export async function listBooks(): Promise<AccountBooks> {
   return res.json();
 }
 
+/** Erase ALL of the account's cloud data (R2 PDFs/content + D1 books/progress/tier). Call this
+ * before deleting the auth user so account deletion also removes everything stored in the cloud. */
+export async function deleteAccountData(): Promise<void> {
+  const res = await authedFetch("/account", { method: "DELETE" });
+  if (!res.ok) throw new Error(`deleteAccount failed: ${res.status}`);
+}
+
 // ---- Pro cloud sync of the PDF blob + deck content (R2) ----
 
 /** Upload the PDF (Pro). 403 (standard tier) is a silent no-op. */

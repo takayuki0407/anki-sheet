@@ -2,7 +2,7 @@
 // Reachable from the topbar "情報" link.
 import { useEffect, useState } from "react";
 import { useApp } from "../store/session";
-import { signOutUser, useAuth } from "../auth/useAuth";
+import { deleteAccount, signOutUser, useAuth } from "../auth/useAuth";
 import { listBooks, type AccountBooks } from "../sync/api";
 
 const SUPPORT_EMAIL = "zabieru.0407@gmail.com";
@@ -53,6 +53,29 @@ export function Info() {
   const setView = useApp((s) => s.setView);
   const user = useAuth((s) => s.user);
   const [usage, setUsage] = useState<AccountBooks | null>(null);
+  const [delOpen, setDelOpen] = useState(false);
+  const [delPw, setDelPw] = useState("");
+  const [delBusy, setDelBusy] = useState(false);
+  const [delMsg, setDelMsg] = useState("");
+
+  const onDeleteAccount = async () => {
+    setDelBusy(true);
+    setDelMsg("");
+    try {
+      await deleteAccount(delPw);
+      alert("アカウントと、クラウドに保存されたデータ（PDF・進捗）を削除しました。");
+      setView({ name: "home" });
+    } catch (e) {
+      const code = e && typeof e === "object" && "code" in e ? String((e as { code: string }).code) : "";
+      setDelMsg(
+        /wrong-password|invalid-credential|invalid-login/.test(code)
+          ? "パスワードが正しくありません。"
+          : "削除に失敗しました：" + (e instanceof Error ? e.message : String(e)),
+      );
+    } finally {
+      setDelBusy(false);
+    }
+  };
   useEffect(() => {
     if (!user) {
       setUsage(null);
@@ -115,6 +138,57 @@ export function Info() {
               <button className="btn ghost sm" onClick={() => void signOutUser()}>
                 ログアウト
               </button>
+              <div className="danger-zone">
+                {!delOpen ? (
+                  <button
+                    className="linklike danger-link"
+                    onClick={() => {
+                      setDelOpen(true);
+                      setDelMsg("");
+                      setDelPw("");
+                    }}
+                  >
+                    アカウントを削除
+                  </button>
+                ) : (
+                  <div className="delete-account">
+                    <p className="small">
+                      アカウントを削除すると、
+                      <strong>クラウドに保存されたPDF・検出結果・進捗もすべて削除</strong>され、元に
+                      戻せません。確認のためパスワードを入力してください（この端末内のデータは残ります）。
+                    </p>
+                    <input
+                      type="password"
+                      className="del-pw"
+                      placeholder="パスワード"
+                      value={delPw}
+                      autoComplete="current-password"
+                      onChange={(e) => setDelPw(e.target.value)}
+                    />
+                    {delMsg && <p className="auth-msg">{delMsg}</p>}
+                    <div className="del-actions">
+                      <button
+                        className="btn ghost sm"
+                        disabled={delBusy}
+                        onClick={() => {
+                          setDelOpen(false);
+                          setDelPw("");
+                          setDelMsg("");
+                        }}
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        className="btn danger sm"
+                        disabled={delBusy || !delPw}
+                        onClick={onDeleteAccount}
+                      >
+                        {delBusy ? "削除中…" : "削除する"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <>
