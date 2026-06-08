@@ -20,7 +20,7 @@ import {
   updateBookMeta,
   type AccountBook,
 } from "../sync/api";
-import { downloadDeck } from "../sync/deck";
+import { backfillCloudIfPro, downloadDeck } from "../sync/deck";
 import type { DeckRow } from "../types";
 
 function dateStamp(): string {
@@ -119,11 +119,9 @@ export function DeckList() {
 
   // Books in the account that aren't on THIS device yet → offer a one-tap cloud download (Pro).
   const [cloud, setCloud] = useState<AccountBook[] | null>(null);
-  const [cloudPro, setCloudPro] = useState(false); // account can actually fetch cloud PDFs (pro/admin)
   useEffect(() => {
     if (!user) {
       setCloud(null);
-      setCloudPro(false);
       return;
     }
     let live = true;
@@ -131,7 +129,6 @@ export function DeckList() {
       .then(async (u) => {
         if (!live) return;
         setCloud(u.books);
-        setCloudPro(u.tier === "pro" || u.tier === "admin");
         // Reconcile favorite / latest-opened set on other devices ONCE per fetch, against a fresh
         // read of the local decks (not the live query) so a later optimistic toggle isn't clobbered
         // by a stale snapshot. Server is authoritative for favorite; opened_at takes the most recent.
@@ -144,12 +141,10 @@ export function DeckList() {
           if ((b.opened_at ?? 0) > (local.openedAt ?? 0)) patch.openedAt = b.opened_at;
           if (Object.keys(patch).length) await updateDeck(local.id, patch);
         }
+        void backfillCloudIfPro(); // Pro: upload any local book that has no cloud file yet
       })
       .catch(() => {
-        if (live) {
-          setCloud(null);
-          setCloudPro(false);
-        }
+        if (live) setCloud(null);
       });
     return () => {
       live = false;
@@ -235,16 +230,13 @@ export function DeckList() {
         <div className="cloud-section">
           <h3 className="section">クラウド（他の端末の本）</h3>
           <p className="muted small">
-            {cloudPro
-              ? "同じアカウントで取り込んだ本です。タップでこの端末に取り込めます。"
-              : "Standardプランはクラウドにファイルを保存しません。これらはアカウントに登録された枠で、取得はできません。不要なら削除して枠を空けられます。"}
+            アカウントに登録された本です。クラウドに保存済み（Proで取り込み）の本は取り込めます。ファイルの無い本（Standardの枠のみ）は削除して枠を空けられます。
           </p>
           <ul className="cloud-list">
             {remote.map((b) => (
               <CloudBook
                 key={b.book_id}
                 book={b}
-                pro={cloudPro}
                 onRemoved={(id) => setCloud((c) => (c ? c.filter((x) => x.book_id !== id) : c))}
               />
             ))}
@@ -256,15 +248,7 @@ export function DeckList() {
 }
 
 /** A book that exists in the account but not on this device — one tap downloads + rebuilds it. */
-function CloudBook({
-  book,
-  pro,
-  onRemoved,
-}: {
-  book: AccountBook;
-  pro: boolean;
-  onRemoved: (id: string) => void;
-}) {
+function CloudBook({ book, onRemoved }: { book: AccountBook; onRemoved: (id: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const download = async () => {
@@ -290,11 +274,14 @@ function CloudBook({
       setBusy(false);
     }
   };
+  // A cloud PDF exists (uploaded while Pro) → downloadable (GET is owner-open, so even a
+  // since-downgraded Standard account can re-download). size 0 = slot-only → offer to remove.
+  const hasFile = book.size > 0;
   return (
     <li className="cloud-item">
       <span className="cloud-name">{book.name || "（無題）"}</span>
       <span className="cloud-device">{book.device ?? ""}</span>
-      {pro ? (
+      {hasFile ? (
         <button className="btn sm" onClick={download} disabled={busy}>
           {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
         </button>
