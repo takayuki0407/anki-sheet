@@ -40,8 +40,8 @@ interface Props {
   drawArm?: boolean;
   /** Visual hint for the drawn rectangle (add = red box, delete = blue region). */
   drawKind?: "add" | "delete";
-  /** Called with the drawn rectangle (page coordinates) on release. */
-  onDrawRect?: (rect: Rect) => void;
+  /** Called with the drawn rectangle (page coordinates) + its page index on release. */
+  onDrawRect?: (rect: Rect, page: number) => void;
   /** Delete a mask (false positive) by its group/card id. */
   onDeleteMask?: (id: string | number) => void;
 }
@@ -242,7 +242,10 @@ export function PageOverlay({
                   const w = Math.abs(d.x - d.x0);
                   const h = Math.abs(d.y - d.y0);
                   if (w > 6 && h > 6)
-                    onDrawRect?.({ x: x / fitScale, y: y / fitScale, w: w / fitScale, h: h / fitScale });
+                    onDrawRect?.(
+                      { x: x / fitScale, y: y / fitScale, w: w / fitScale, h: h / fitScale },
+                      pageIndex,
+                    );
                 }
                 return null;
               });

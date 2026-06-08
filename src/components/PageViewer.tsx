@@ -417,6 +417,28 @@ export function PageViewer({ deckId }: { deckId: number }) {
       .filter((a) => a.pageIndex === pageIndex)
       .map((a) => ({ id: a.tempId, rects: [a.rect] })),
   ];
+  // For 縦読み editing: overlay the staged buffer onto the per-page cards (base minus pending
+  // deletes, plus pending adds as pseudo cards) so ContinuousView shows the in-progress edits.
+  let displayCardsByPage = cardsByPage;
+  if (editMode) {
+    const m = new Map<number, CardRow[]>();
+    for (const [page, cards] of cardsByPage) m.set(page, cards.filter((c) => !editDels.has(c.id!)));
+    for (const a of editAdds) {
+      const arr = m.get(a.pageIndex) ?? [];
+      arr.push({
+        id: a.tempId,
+        deckId,
+        pdfId: 0,
+        pageIndex: a.pageIndex,
+        rects: [a.rect],
+        answerRect: a.rect,
+        text: "",
+        createdAt: 0,
+      });
+      m.set(a.pageIndex, arr);
+    }
+    displayCardsByPage = m;
+  }
   // Each edit pushes the current buffer onto the history stack first, so アンドゥ can restore it.
   const applyEdit = (nextAdds: EditAdd[], nextDels: Set<number>) => {
     setHistory((h) => [...h, { adds: editAdds, dels: editDels }]);
@@ -437,17 +459,17 @@ export function PageViewer({ deckId }: { deckId: number }) {
   };
   // The drawn rectangle (page coords): "add" → a new mask; "delete" → remove every mask (saved or
   // staged) on this page that it overlaps (範囲一括削除).
-  const onDrawRect = (rect: Rect) => {
+  const onDrawRect = (rect: Rect, page: number) => {
     if (drawMode === "delete") {
       const dels = new Set(editDels);
-      for (const c of currentCards) {
+      for (const c of cardsByPage.get(page) ?? []) {
         const rs = c.rects.length ? c.rects : [c.answerRect];
         if (!editDels.has(c.id!) && rs.some((r) => rectsOverlap(r, rect))) dels.add(c.id!);
       }
-      const adds = editAdds.filter((a) => !(a.pageIndex === pageIndex && rectsOverlap(a.rect, rect)));
+      const adds = editAdds.filter((a) => !(a.pageIndex === page && rectsOverlap(a.rect, rect)));
       applyEdit(adds, dels);
     } else {
-      applyEdit([...editAdds, { tempId: tempIdRef.current--, pageIndex, rect }], editDels);
+      applyEdit([...editAdds, { tempId: tempIdRef.current--, pageIndex: page, rect }], editDels);
     }
     setDrawMode(null);
   };
@@ -520,7 +542,6 @@ export function PageViewer({ deckId }: { deckId: number }) {
               onClick={() => {
                 setEditMode(true);
                 setDrawMode(null);
-                setMode("paged"); // mask editing happens on the single paged view
               }}
             >
               編集
@@ -532,7 +553,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
       {editMode && (
         <div className="edit-bar">
           <span className="muted small">
-            タップで個別削除／ドラッグで「追加」または「範囲削除」（p.{pageIndex + 1}）
+            タップで個別削除／ドラッグで「追加」または「範囲削除」
           </span>
           <button
             className={`btn sm ${drawMode === "add" ? "primary" : ""}`}
@@ -587,8 +608,8 @@ export function PageViewer({ deckId }: { deckId: number }) {
             pageCount={pageCount}
             pageW={pdf.pageW}
             pageH={pdf.pageH}
-            cardsByPage={cardsByPage}
-            sheetOn={sheetOn}
+            cardsByPage={displayCardsByPage}
+            sheetOn={editMode ? true : sheetOn}
             revealed={revealed}
             onToggle={toggle}
             zoom={zoom}
@@ -597,10 +618,16 @@ export function PageViewer({ deckId }: { deckId: number }) {
             jumpNonce={jumpNonce}
             onVisiblePage={setPageIndex}
             onPinchZoom={onPinchZoom}
-            manualSheet={redMode === "sheet"}
+            manualSheet={editMode ? false : redMode === "sheet"}
             bandTop={band.top}
+            editMode={editMode}
+            drawMode={drawMode}
+            onDeleteMask={onDeleteMask}
+            onDrawRect={onDrawRect}
           />
-          {redMode === "sheet" && <RedSheet band={band} onChange={setBand} hostRef={sheetHostRef} />}
+          {redMode === "sheet" && !editMode && (
+            <RedSheet band={band} onChange={setBand} hostRef={sheetHostRef} />
+          )}
         </div>
       )}
 
@@ -643,8 +670,6 @@ export function PageViewer({ deckId }: { deckId: number }) {
         </button>
         <button
           className="btn ghost sm"
-          disabled={editMode}
-          title={editMode ? "編集中は横読み固定です" : undefined}
           onClick={() => setMode((m) => (m === "paged" ? "scroll" : "paged"))}
         >
           {mode === "paged" ? "縦読み" : "横読み"}

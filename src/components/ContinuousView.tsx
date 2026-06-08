@@ -3,7 +3,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
 import type { FitMode } from "../render/PageOverlay";
 import { useDragPan, useTouchPan, useWheelZoom } from "../render/viewerGestures";
-import type { CardRow } from "../types";
+import type { CardRow, Rect } from "../types";
 
 const MAX_DEVICE_W = 2800;
 const BUFFER = "1200px 0px"; // pre-render pages within this distance of the viewport
@@ -31,6 +31,12 @@ interface Props {
    * decide which are revealed — answers above the band's top edge show, below stay hidden. */
   manualSheet?: boolean;
   bandTop?: number;
+  // ---- Manual mask editing (works in 縦読み too) ----
+  editMode?: boolean;
+  /** Armed to draw on a page: "add" a mask or "delete" everything in a region. null = off. */
+  drawMode?: "add" | "delete" | null;
+  onDeleteMask?: (id: number) => void;
+  onDrawRect?: (rect: Rect, page: number) => void;
 }
 
 /**
@@ -59,6 +65,10 @@ export function ContinuousView({
   onPinchZoom,
   manualSheet = false,
   bandTop = 0,
+  editMode = false,
+  drawMode = null,
+  onDeleteMask,
+  onDrawRect,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
@@ -70,9 +80,12 @@ export function ContinuousView({
   const anchor = useRef({ page: jumpTo ?? 0, frac: 0, hCenter: 0.5 });
   const prevCssW = useRef(0);
 
-  useDragPan(scrollRef); // mouse/pen hand-tool pan
-  useTouchPan(scrollRef); // touch: angle-based vertical / free 2D pan with momentum
-  useWheelZoom(scrollRef, onPinchZoom); // trackpad / ctrl+wheel zoom (desktop)
+  // While armed to draw a mask region, suppress panning/zoom (and native scroll on the page slots)
+  // so the drag draws instead of scrolling the reader.
+  const armed = drawMode != null;
+  useDragPan(scrollRef, !armed); // mouse/pen hand-tool pan
+  useTouchPan(scrollRef, !armed); // touch: angle-based vertical / free 2D pan with momentum
+  useWheelZoom(scrollRef, onPinchZoom, !armed); // trackpad / ctrl+wheel zoom (desktop)
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -197,6 +210,10 @@ export function ContinuousView({
             revealed={revealed}
             onToggle={onToggle}
             rootRef={scrollRef}
+            editMode={editMode}
+            drawMode={drawMode}
+            onDeleteMask={onDeleteMask}
+            onDrawRect={onDrawRect}
           />
         ))}
     </div>
@@ -215,6 +232,10 @@ interface SlotProps {
   revealed: ReadonlySet<number>;
   onToggle: (id: number) => void;
   rootRef: React.RefObject<HTMLDivElement | null>;
+  editMode?: boolean;
+  drawMode?: "add" | "delete" | null;
+  onDeleteMask?: (id: number) => void;
+  onDrawRect?: (rect: Rect, page: number) => void;
 }
 
 function PageSlot({
@@ -229,11 +250,16 @@ function PageSlot({
   revealed,
   onToggle,
   rootRef,
+  editMode = false,
+  drawMode = null,
+  onDeleteMask,
+  onDrawRect,
 }: SlotProps) {
   const slotRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderToken = useRef(0);
   const [active, setActive] = useState(false);
+  const [draw, setDraw] = useState<{ x0: number; y0: number; x: number; y: number } | null>(null);
   const height = (cssW * pageH) / pageW;
   const fitScale = cssW > 0 ? cssW / pageW : 0;
 
@@ -290,20 +316,20 @@ function PageSlot({
     <div className="page-slot" ref={slotRef} data-page={pageIndex} style={{ width: cssW, height }}>
       <canvas ref={canvasRef} className="page-canvas" />
       {active &&
-        (sheetOn || manualSheet) &&
+        (editMode || sheetOn || manualSheet) &&
         fitScale > 0 &&
         cards.flatMap((c) => {
           const rects = c.rects.length ? c.rects : [c.answerRect];
           // The whole answer (card) reveals together — wrapped answers stay one card. In 赤シート
           // mode the band position (not a tap) reveals masks, so render them all covered and let
           // ContinuousView's gateMasks toggle .sheet-reveal; taps are ignored (CSS pointer-events).
-          const isRevealed = !manualSheet && revealed.has(c.id!);
+          const isRevealed = !editMode && !manualSheet && revealed.has(c.id!);
           return rects.map((r, i) => {
             const h = r.h * fitScale;
             return (
               <div
                 key={`${c.id}:${i}`}
-                className={isRevealed ? "reveal-zone" : "mask"}
+                className={editMode ? "mask mask-edit" : isRevealed ? "reveal-zone" : "mask"}
                 style={
                   {
                     left: r.x * fitScale,
@@ -314,11 +340,63 @@ function PageSlot({
                     "--tap-pad": `${Math.max(4, h * 0.3)}px`,
                   } as CSSProperties
                 }
-                onClick={manualSheet ? undefined : () => onToggle(c.id!)}
+                onClick={
+                  editMode ? () => onDeleteMask?.(c.id!) : manualSheet ? undefined : () => onToggle(c.id!)
+                }
+                title={editMode ? "タップで削除" : undefined}
               />
             );
           });
         })}
+      {active && editMode && drawMode != null && fitScale > 0 && (
+        <div
+          className="draw-surface"
+          onPointerDown={(e) => {
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+            const r = slotRef.current!.getBoundingClientRect();
+            const x = e.clientX - r.left;
+            const y = e.clientY - r.top;
+            setDraw({ x0: x, y0: y, x, y });
+          }}
+          onPointerMove={(e) => {
+            const cx = e.clientX;
+            const cy = e.clientY;
+            setDraw((d) => {
+              if (!d) return d;
+              const r = slotRef.current!.getBoundingClientRect();
+              return { ...d, x: cx - r.left, y: cy - r.top };
+            });
+          }}
+          onPointerUp={() => {
+            setDraw((d) => {
+              if (d && fitScale > 0) {
+                const x = Math.min(d.x0, d.x);
+                const y = Math.min(d.y0, d.y);
+                const w = Math.abs(d.x - d.x0);
+                const h = Math.abs(d.y - d.y0);
+                if (w > 6 && h > 6)
+                  onDrawRect?.(
+                    { x: x / fitScale, y: y / fitScale, w: w / fitScale, h: h / fitScale },
+                    pageIndex,
+                  );
+              }
+              return null;
+            });
+          }}
+        >
+          {draw && (
+            <div
+              className={drawMode === "delete" ? "draw-rect draw-rect-del" : "draw-rect"}
+              style={{
+                left: Math.min(draw.x0, draw.x),
+                top: Math.min(draw.y0, draw.y),
+                width: Math.abs(draw.x - draw.x0),
+                height: Math.abs(draw.y - draw.y0),
+              }}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
