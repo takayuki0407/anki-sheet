@@ -41,7 +41,7 @@ export function App() {
           </button>
           {view.name !== "info" && (
             <button className="btn ghost sm topbar-info" onClick={() => setView({ name: "info" })}>
-              アカウント・情報
+              情報・ヘルプ
             </button>
           )}
         </header>
