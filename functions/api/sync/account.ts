@@ -23,6 +23,8 @@ export const onRequestDelete: Fn = async (ctx) => {
   // 2) D1 rows for this account.
   await ctx.env.DB.prepare("DELETE FROM progress WHERE uid = ?").bind(uid).run();
   await ctx.env.DB.prepare("DELETE FROM books WHERE uid = ?").bind(uid).run();
+  await ctx.env.DB.prepare("DELETE FROM questions WHERE uid = ?").bind(uid).run();
+  await ctx.env.DB.prepare("DELETE FROM generation_usage WHERE uid = ?").bind(uid).run();
   await ctx.env.DB.prepare("DELETE FROM users WHERE uid = ?").bind(uid).run();
 
   return json({ ok: true });

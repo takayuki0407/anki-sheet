@@ -15,6 +15,7 @@ export interface D1PreparedStatement {
 }
 export interface D1DB {
   prepare(query: string): D1PreparedStatement;
+  batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
 }
 
 // Minimal R2 surface we use. PDFS is optional: it's only bound after R2 is enabled in the
@@ -44,6 +45,7 @@ export interface Env {
   FIREBASE_PROJECT_ID: string;
   ADMIN_EMAIL?: string; // this account is treated as 'admin' (unlimited) regardless of users.tier
   RC_WEBHOOK_SECRET?: string; // shared secret for the RevenueCat webhook (Pages secret)
+  ANTHROPIC_API_KEY?: string; // server-only secret for AI question generation (never sent to clients)
 }
 
 /** The subset of the Pages Functions context we use. `data.uid`/`data.email` are set by auth. */

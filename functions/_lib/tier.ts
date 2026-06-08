@@ -20,6 +20,16 @@ export function limitFor(t: Tier): number {
   return isUnlimited(t) ? Number.MAX_SAFE_INTEGER : STANDARD_DECK_LIMIT;
 }
 
+// Monthly AI question-generation page budget per tier (phase 1). Distinct from limitFor (book
+// count). admin is unlimited. (Phase 2 adds Premium = 200.)
+export const GEN_PAGE_STANDARD = 10;
+export const GEN_PAGE_PRO = 30;
+export function genPageLimit(t: Tier): number {
+  if (t === "admin") return Number.MAX_SAFE_INTEGER;
+  if (t === "pro") return GEN_PAGE_PRO;
+  return GEN_PAGE_STANDARD; // standard
+}
+
 export async function getTier(env: Env, uid: string, email?: string): Promise<Tier> {
   // An EXPLICIT tier row wins — including for the admin email. This lets the developer switch their
   // OWN account to standard/pro to TEST plan behavior (forced-trim downgrade, the Standard limit,
