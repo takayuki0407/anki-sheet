@@ -21,10 +21,17 @@ export function limitFor(t: Tier): number {
 }
 
 export async function getTier(env: Env, uid: string, email?: string): Promise<Tier> {
-  if (email && env.ADMIN_EMAIL && email.toLowerCase() === env.ADMIN_EMAIL.toLowerCase())
-    return "admin";
+  // An EXPLICIT tier row wins — including for the admin email. This lets the developer switch their
+  // OWN account to standard/pro to TEST plan behavior (forced-trim downgrade, the Standard limit,
+  // Pro cloud sync, retention) via the admin-only POST /api/sync/dev/tier, without a live
+  // subscription. In production the row is set by the RevenueCat webhook.
   const row = await env.DB.prepare("SELECT tier FROM users WHERE uid = ?")
     .bind(uid)
     .first<{ tier: string }>();
-  return row?.tier === "pro" ? "pro" : row?.tier === "admin" ? "admin" : "standard";
+  if (row?.tier === "standard" || row?.tier === "pro" || row?.tier === "admin") return row.tier;
+  // No explicit tier: the developer account (by verified email) is unlimited; everyone else is
+  // Standard (the safe, most-restrictive paid fallback until the webhook reports).
+  if (email && env.ADMIN_EMAIL && email.toLowerCase() === env.ADMIN_EMAIL.toLowerCase())
+    return "admin";
+  return "standard";
 }

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { deleteDeck, getCover, listDecks } from "../db/repo";
 import { downloadBlob, exportBackup } from "../db/backup";
+import { DevTierSwitch } from "./DevTierSwitch";
 import type { DeckRow } from "../types";
 
 function dateStamp(): string {
@@ -130,6 +131,10 @@ export function DowngradeSelect({ keepLimit }: { keepLimit: number }) {
           {busy ? "削除中…" : `選んだ ${target} 冊を残して削除`}
         </button>
       </div>
+
+      {/* Admin escape hatch: switch back to Pro (unlimited) to leave this forced screen without
+          deleting anything — only visible to the developer account. */}
+      <DevTierSwitch />
     </div>
   );
 }

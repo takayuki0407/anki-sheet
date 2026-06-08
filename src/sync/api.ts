@@ -106,6 +106,19 @@ export async function listBooks(): Promise<AccountBooks> {
   return res.json();
 }
 
+/** Admin-only TEST helper: set the signed-in account's own tier (and optionally backdate
+ * downgraded_at to exercise the 6-month retention job). Throws 403 unless the account is the admin
+ * (enforced server-side against the verified token). Used by the developer dev-tools UI. */
+export async function setDevTier(
+  tier: "standard" | "pro" | "admin",
+  downgradedAt?: number | null,
+): Promise<void> {
+  const body: { tier: string; downgradedAt?: number | null } = { tier };
+  if (downgradedAt !== undefined) body.downgradedAt = downgradedAt;
+  const res = await authedFetch("/dev/tier", { method: "POST", body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`setDevTier failed: ${res.status}`);
+}
+
 /** Erase ALL of the account's cloud data (R2 PDFs/content + D1 books/progress/tier). Call this
  * before deleting the auth user so account deletion also removes everything stored in the cloud. */
 export async function deleteAccountData(): Promise<void> {

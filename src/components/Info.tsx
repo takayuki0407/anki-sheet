@@ -7,6 +7,7 @@ import { deleteAccount, signOutUser, useAuth } from "../auth/useAuth";
 import { listBooks, type AccountBooks } from "../sync/api";
 import { listDecks } from "../db/repo";
 import { clearAllLocalData } from "../db/backup";
+import { DevTierSwitch } from "./DevTierSwitch";
 
 const SUPPORT_EMAIL = "zabieru.0407@gmail.com";
 
@@ -302,6 +303,7 @@ export function Info() {
                   Pro にアップグレード
                 </button>
               )}
+              <DevTierSwitch />
             </>
           )}
         </div>
