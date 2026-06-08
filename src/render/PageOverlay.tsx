@@ -33,6 +33,15 @@ interface Props {
   maxWidth?: number;
   /** Trackpad pinch / ctrl+wheel zoom: receives a multiplicative factor. */
   onPinchZoom?: (factor: number) => void;
+  // ---- Manual mask editing (paged mode) ----
+  /** Edit mode: masks render as visible outlines; tapping one deletes it. Page tap-zones are off. */
+  editMode?: boolean;
+  /** Armed to draw the next mask: a drag on the page draws a rectangle (added on release). */
+  drawArm?: boolean;
+  /** Add a mask from a drawn rectangle (in page coordinates). */
+  onAddMask?: (rect: Rect) => void;
+  /** Delete a mask (false positive) by its group/card id. */
+  onDeleteMask?: (id: string | number) => void;
 }
 
 /**
@@ -54,9 +63,15 @@ export function PageOverlay({
   onTapZone,
   maxWidth = 900,
   onPinchZoom,
+  editMode = false,
+  drawArm = false,
+  onAddMask,
+  onDeleteMask,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [draw, setDraw] = useState<{ x0: number; y0: number; x: number; y: number } | null>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const renderToken = useRef(0);
   // Keep the viewport centred on the same spot when zoom reflows the page.
@@ -152,10 +167,11 @@ export function PageOverlay({
   return (
     <div className="page-scroll" ref={scrollRef} onScroll={onScroll}>
       <div
-        className={`page-stage${onTapZone ? " tappable" : ""}`}
+        className={`page-stage${onTapZone && !editMode ? " tappable" : ""}`}
+        ref={stageRef}
         style={{ width: cssW || undefined }}
         onClick={(e) => {
-          if (!onTapZone) return;
+          if (!onTapZone || editMode) return;
           const r = e.currentTarget.getBoundingClientRect();
           const f = (e.clientX - r.left) / r.width;
           if (f < 0.33) onTapZone(-1);
@@ -173,7 +189,7 @@ export function PageOverlay({
               return (
                 <div
                   key={`${g.id}:${i}`}
-                  className={revealed ? "reveal-zone" : "mask"}
+                  className={editMode ? "mask mask-edit" : revealed ? "reveal-zone" : "mask"}
                   style={
                     {
                       left: r.x * fitScale,
@@ -186,12 +202,60 @@ export function PageOverlay({
                   }
                   onClick={(e) => {
                     e.stopPropagation();
-                    onToggle?.(g.id);
+                    if (editMode) onDeleteMask?.(g.id);
+                    else onToggle?.(g.id);
                   }}
+                  title={editMode ? "タップで削除" : undefined}
                 />
               );
             });
           })}
+        {editMode && drawArm && (
+          <div
+            className="draw-surface"
+            onPointerDown={(e) => {
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              const r = stageRef.current!.getBoundingClientRect();
+              const x = e.clientX - r.left;
+              const y = e.clientY - r.top;
+              setDraw({ x0: x, y0: y, x, y });
+            }}
+            onPointerMove={(e) => {
+              const cx = e.clientX;
+              const cy = e.clientY;
+              setDraw((d) => {
+                if (!d) return d;
+                const r = stageRef.current!.getBoundingClientRect();
+                return { ...d, x: cx - r.left, y: cy - r.top };
+              });
+            }}
+            onPointerUp={() => {
+              setDraw((d) => {
+                if (d && fitScale > 0) {
+                  const x = Math.min(d.x0, d.x);
+                  const y = Math.min(d.y0, d.y);
+                  const w = Math.abs(d.x - d.x0);
+                  const h = Math.abs(d.y - d.y0);
+                  if (w > 6 && h > 6)
+                    onAddMask?.({ x: x / fitScale, y: y / fitScale, w: w / fitScale, h: h / fitScale });
+                }
+                return null;
+              });
+            }}
+          >
+            {draw && (
+              <div
+                className="draw-rect"
+                style={{
+                  left: Math.min(draw.x0, draw.x),
+                  top: Math.min(draw.y0, draw.y),
+                  width: Math.abs(draw.x - draw.x0),
+                  height: Math.abs(draw.y - draw.y0),
+                }}
+              />
+            )}
+          </div>
+        )}
         {fitScale > 0 &&
           highlightRects?.map((r, i) => (
             <div

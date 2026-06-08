@@ -3,8 +3,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   addBookmark,
+  addCard,
   deckCards,
   deleteBookmark,
+  deleteCard,
   getDeck,
   getDeckPdf,
   listBookmarks,
@@ -17,7 +19,7 @@ import { ContinuousView } from "./ContinuousView";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
 import { getProgress, putProgress } from "../sync/api";
-import type { BookmarkRow, CardRow, PdfRow } from "../types";
+import type { BookmarkRow, CardRow, PdfRow, Rect } from "../types";
 
 type Status = "loading" | "ready" | "error";
 type Mode = "paged" | "scroll";
@@ -139,6 +141,9 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [band, setBand] = useState<Band>({ top: 60, height: 150 });
   const sheetHostRef = useRef<HTMLDivElement>(null);
   const sheetOn = redMode === "mask";
+  // Manual mask editing (paged mode): tap a mask to delete it, drag to add one.
+  const [editMode, setEditMode] = useState(false);
+  const [drawArm, setDrawArm] = useState(false);
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -385,6 +390,17 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const groups: MaskGroup[] = sheetOn
     ? currentCards.map((c) => ({ id: c.id!, rects: c.rects.length ? c.rects : [c.answerRect] }))
     : [];
+  // In edit mode show every detected mask (regardless of red mode) so any can be tapped to delete.
+  const editGroups: MaskGroup[] = currentCards.map((c) => ({
+    id: c.id!,
+    rects: c.rects.length ? c.rects : [c.answerRect],
+  }));
+  const onAddMask = async (rect: Rect) => {
+    if (pdf?.id == null) return;
+    await addCard(deckId, pdf.id, pageIndex, rect); // live query refreshes the masks
+    setDrawArm(false);
+  };
+  const onDeleteMask = (id: string | number) => void deleteCard(id as number);
 
   const addCurrentBookmark = async () => {
     const title = window.prompt("しおりの名前（章・節など）", `${pageIndex + 1}ページ`);
@@ -409,21 +425,47 @@ export function PageViewer({ deckId }: { deckId: number }) {
         <span className="book-title-bar" title={deckName}>
           {deckName}
         </span>
-        <button
-          className={`btn sm ${redMode === "mask" ? "primary" : "ghost"}`}
-          onClick={selectMask}
-        >
-          赤マスク
-        </button>
-        {mode === "scroll" && (
-          <button
-            className={`btn sm ${redMode === "sheet" ? "primary" : "ghost"}`}
-            onClick={selectSheet}
-          >
-            赤シート
-          </button>
+        {!editMode && (
+          <>
+            <button
+              className={`btn sm ${redMode === "mask" ? "primary" : "ghost"}`}
+              onClick={selectMask}
+            >
+              赤マスク
+            </button>
+            {mode === "scroll" && (
+              <button
+                className={`btn sm ${redMode === "sheet" ? "primary" : "ghost"}`}
+                onClick={selectSheet}
+              >
+                赤シート
+              </button>
+            )}
+          </>
         )}
+        <button
+          className={`btn sm ${editMode ? "primary" : "ghost"}`}
+          onClick={() => {
+            const on = !editMode;
+            setEditMode(on);
+            setDrawArm(false);
+            if (on) setMode("paged"); // mask editing happens on the single paged view
+          }}
+        >
+          {editMode ? "編集を終了" : "編集"}
+        </button>
       </div>
+
+      {editMode && (
+        <div className="edit-bar">
+          <span className="muted small">
+            マスクをタップで削除／「マスク追加」を押してドラッグで囲むと追加できます
+          </span>
+          <button className={`btn sm ${drawArm ? "primary" : ""}`} onClick={() => setDrawArm((v) => !v)}>
+            {drawArm ? "囲んでください…（取消）" : "＋ マスク追加"}
+          </button>
+        </div>
+      )}
 
       {ready && mode === "paged" && (
         <PageOverlay
@@ -431,7 +473,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
           pageIndex={pageIndex}
           pageW={pdf.pageW}
           pageH={pdf.pageH}
-          groups={groups}
+          groups={editMode ? editGroups : groups}
           revealedIds={revealed}
           onToggle={(id) => toggle(id as number)}
           fitMode={fitMode}
@@ -439,6 +481,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
           onTapZone={(dir) => goTo(pageIndex + dir)}
           onPinchZoom={onPinchZoom}
           maxWidth={1600}
+          editMode={editMode}
+          drawArm={drawArm}
+          onAddMask={onAddMask}
+          onDeleteMask={onDeleteMask}
         />
       )}
       {ready && mode === "scroll" && (

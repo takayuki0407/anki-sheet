@@ -8,6 +8,7 @@ import type {
   DeckRow,
   DetectedCloze,
   PdfRow,
+  Rect,
 } from "../types";
 
 export interface ImportParams {
@@ -78,6 +79,29 @@ export function getDeckPdf(deckId: number): Promise<PdfRow | undefined> {
 
 export function answerCount(deckId: number): Promise<number> {
   return db.cards.where("deckId").equals(deckId).count();
+}
+
+/** Add a manual answer mask on a page (user fixing a detection miss). Returns the new card id. */
+export async function addCard(
+  deckId: number,
+  pdfId: number,
+  pageIndex: number,
+  rect: Rect,
+): Promise<number> {
+  return (await db.cards.add({
+    deckId,
+    pdfId,
+    pageIndex,
+    rects: [rect],
+    answerRect: rect,
+    text: "",
+    createdAt: Date.now(),
+  })) as number;
+}
+
+/** Remove a single answer mask (user fixing a false positive). */
+export async function deleteCard(cardId: number): Promise<void> {
+  await db.cards.delete(cardId);
 }
 
 export async function updateDeck(deckId: number, patch: Partial<DeckRow>): Promise<void> {
