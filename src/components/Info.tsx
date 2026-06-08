@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../store/session";
 import { deleteAccount, signOutUser, useAuth } from "../auth/useAuth";
 import { listBooks, type AccountBooks } from "../sync/api";
+import { clearAllLocalData } from "../db/backup";
 
 const SUPPORT_EMAIL = "zabieru.0407@gmail.com";
 
@@ -58,10 +59,22 @@ export function Info() {
   const [delBusy, setDelBusy] = useState(false);
   const [delMsg, setDelMsg] = useState("");
 
+  const onSignOut = async () => {
+    if (
+      !window.confirm(
+        "ログアウトすると、この端末に保存されている本はすべて削除されます（Proでクラウドに保存済みの本は再ログインで取得できます）。よろしいですか？",
+      )
+    )
+      return;
+    await signOutUser();
+    await clearAllLocalData();
+    setView({ name: "decks" }); // empty bookshelf, signed out
+  };
+
   const onDeleteAccount = async () => {
     if (
       !window.confirm(
-        "本当にアカウントを削除しますか？\nクラウドに保存されたPDF・検出結果・進捗もすべて削除され、元に戻せません。",
+        "本当にアカウントを削除しますか？\nクラウドのPDF・検出結果・進捗、そしてこの端末内のデータもすべて削除され、元に戻せません。",
       )
     )
       return;
@@ -69,7 +82,8 @@ export function Info() {
     setDelMsg("");
     try {
       await deleteAccount(delPw);
-      alert("アカウントと、クラウドに保存されたデータ（PDF・進捗）を削除しました。");
+      await clearAllLocalData();
+      alert("アカウントとデータをすべて削除しました。");
       setView({ name: "home" });
     } catch (e) {
       const code = e && typeof e === "object" && "code" in e ? String((e as { code: string }).code) : "";
@@ -141,7 +155,7 @@ export function Info() {
                 同じアカウントで iOSアプリ にもログインできます。Proでは端末・プラットフォーム間で
                 クラウド同期されます。
               </p>
-              <button className="btn ghost sm" onClick={() => void signOutUser()}>
+              <button className="btn ghost sm" onClick={() => void onSignOut()}>
                 ログアウト
               </button>
               <div className="danger-zone">

@@ -108,6 +108,25 @@ export async function importBackup(file: File): Promise<void> {
   await db.meta.put({ key: "lastBackup", value: Date.now() });
 }
 
+/** Erase ALL local data (decks / PDFs / covers / bookmarks / sync meta) — used on logout / account
+ * deletion so the bookshelf is empty for the next account. Pro books re-download from the cloud. */
+export async function clearAllLocalData(): Promise<void> {
+  await db.transaction(
+    "rw",
+    [db.decks, db.pdfs, db.cards, db.bookmarks, db.covers, db.meta],
+    async () => {
+      await Promise.all([
+        db.decks.clear(),
+        db.pdfs.clear(),
+        db.cards.clear(),
+        db.bookmarks.clear(),
+        db.covers.clear(),
+        db.meta.clear(),
+      ]);
+    },
+  );
+}
+
 /** Ask the browser to keep our IndexedDB data (avoid eviction). */
 export async function requestPersistentStorage(): Promise<boolean> {
   if (navigator.storage?.persist) {

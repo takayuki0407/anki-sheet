@@ -1292,6 +1292,11 @@ body {
   line-height: 1.5;
   color: #c0392b;
 }
+.cloud-locked {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
 .cloud-name {
   flex: 1;
   font-size: 14px;
