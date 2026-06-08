@@ -196,7 +196,7 @@ export function ImportWizard() {
             <p className="dz-sub">またはクリックして選択</p>
             <p className="dz-note">
               選んだ色の語句を自動で検出し、暗記カードにします。
-              PDFはこの端末内だけで処理され、アップロードされません。
+              解析はこの端末内で行われます（クラウド同期を使う場合のみ、Proでアカウントに保存）。
             </p>
             <input
               ref={inputRef}
