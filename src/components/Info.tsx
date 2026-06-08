@@ -69,8 +69,8 @@ export function Info() {
   return (
     <div className="panel info-page">
       <div className="panel-head">
-        <button className="btn ghost" onClick={() => setView({ name: "home" })}>
-          ← ホーム
+        <button className="btn ghost" onClick={() => setView({ name: "decks" })}>
+          ← 本棚
         </button>
         <h2>情報・ヘルプ</h2>
       </div>
