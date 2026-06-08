@@ -1,9 +1,11 @@
 // 情報・ヘルプ画面 — usage help, account/data notes, support + legal links, about.
 // Reachable from the topbar "情報" link.
 import { useEffect, useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
 import { useApp } from "../store/session";
 import { deleteAccount, signOutUser, useAuth } from "../auth/useAuth";
 import { listBooks, type AccountBooks } from "../sync/api";
+import { listDecks } from "../db/repo";
 import { clearAllLocalData } from "../db/backup";
 
 const SUPPORT_EMAIL = "zabieru.0407@gmail.com";
@@ -54,6 +56,10 @@ export function Info() {
   const setView = useApp((s) => s.setView);
   const user = useAuth((s) => s.user);
   const [usage, setUsage] = useState<AccountBooks | null>(null);
+  // Per-device limit: the count shown is THIS device's local book count — NOT the account registry
+  // (which spans devices and keeps slot-only rows, so it would over-count, e.g. show 1/10 with an
+  // empty shelf). useLiveQuery keeps it fresh as books are added/removed.
+  const localCount = useLiveQuery(async () => (await listDecks()).length, []) ?? 0;
   const [delOpen, setDelOpen] = useState(false);
   const [delPw, setDelPw] = useState("");
   const [delBusy, setDelBusy] = useState(false);
@@ -136,16 +142,16 @@ export function Info() {
                 <p className="usage-line">
                   {usage.unlimited ? (
                     <>
-                      取り込み：<strong>{usage.count} 冊</strong>（
+                      この端末の本：<strong>{localCount} 冊</strong>（
                       {usage.tier === "admin" ? "管理者" : "Pro"}・無制限）
                     </>
                   ) : (
                     <>
-                      取り込み：
+                      この端末の本：
                       <strong>
-                        {usage.count} / {usage.limit} 冊
+                        {localCount} / {usage.limit} 冊
                       </strong>
-                      （あと {Math.max(0, usage.limit - usage.count)} 冊）
+                      （あと {Math.max(0, usage.limit - localCount)} 冊）
                     </>
                   )}
                 </p>

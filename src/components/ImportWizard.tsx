@@ -8,10 +8,10 @@ import {
   type PdfDetectionResult,
 } from "../pdf/pdfEngine";
 import { PageOverlay } from "../render/PageOverlay";
-import { importBookmarks, importDeck } from "../db/repo";
+import { importBookmarks, importDeck, listDecks } from "../db/repo";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
-import { registerBook } from "../sync/api";
+import { listBooks, registerBook } from "../sync/api";
 import { uploadDeck } from "../sync/deck";
 import { BookLimitDialog, type PendingImport } from "./BookLimitDialog";
 import {
@@ -102,7 +102,7 @@ export function ImportWizard() {
     };
   }, [readyBlob]);
 
-  const handleFile = useCallback((file: File) => {
+  const handleFile = useCallback(async (file: File) => {
     if (file.size > MAX_PDF_BYTES) {
       setPhase({
         k: "error",
@@ -110,6 +110,22 @@ export function ImportWizard() {
         detail: `file: ${file.name}\nsize: ${file.size} bytes`,
       });
       return;
+    }
+    // Per-device limit: block importing past the tier's per-device allowance (Standard = 10 books on
+    // THIS device). The account registry no longer caps globally, so each device enforces its OWN
+    // local count. Fail OPEN on any error (offline / signed-out) so local-first import never breaks.
+    try {
+      const [acct, decks] = await Promise.all([listBooks(), listDecks()]);
+      if (!acct.unlimited && decks.length >= acct.limit) {
+        setPhase({
+          k: "error",
+          message: `この端末では本は ${acct.limit} 冊までです。不要な本を削除するか、Pro（無制限）にアップグレードしてください。`,
+          detail: `tier: ${acct.tier}, local decks: ${decks.length} / ${acct.limit}`,
+        });
+        return;
+      }
+    } catch {
+      /* fail open — keep local-first import working when the registry is unreachable */
     }
     setName(file.name.replace(/\.pdf$/i, ""));
     setPhase({ k: "configuring", blob: file.slice(0, file.size, "application/pdf") });
