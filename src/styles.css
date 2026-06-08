@@ -491,6 +491,17 @@ body {
   background: rgba(37, 99, 235, 0.16);
   border-color: #2563eb;
 }
+/* Study tracking: a small ★ on a starred answer's mask (long-press to toggle). */
+.star-badge {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  font-size: 11px;
+  line-height: 1;
+  color: #f5b301;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
 /* A revealed answer stays clickable so it can be hidden again (no hover emphasis). */
 .reveal-zone {
   position: absolute;

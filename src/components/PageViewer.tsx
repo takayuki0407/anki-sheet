@@ -160,6 +160,9 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [editDels, setEditDels] = useState<Set<number>>(new Set());
   const [history, setHistory] = useState<{ adds: EditAdd[]; dels: Set<number> }[]>([]);
   const tempIdRef = useRef(-1);
+  // Study tracking: starred answers (long-press a mask) + a review-only mode that masks just them.
+  const [starred, setStarred] = useState<Set<number>>(new Set());
+  const [starMode, setStarMode] = useState(false);
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -217,6 +220,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
         setRedMode(d.redMode ?? (d.sheetOn === false ? "off" : "mask"));
         if (d.sheetBand) setBand(d.sheetBand);
         setRevealed(new Set(d.revealed ?? []));
+        setStarred(new Set(d.starred ?? []));
         bookIdRef.current = d.bookId;
         // Pro cross-device progress: if the cloud copy is newer, resume from it (reading position /
         // mode / red-sheet — device-independent fields; reveal state stays local for now).
@@ -344,6 +348,18 @@ export function PageViewer({ deckId }: { deckId: number }) {
       else n.add(id);
       return n;
     });
+  // Long-press a mask to star/unstar its answer (persisted immediately so review mode is stable).
+  const onStar = useCallback(
+    (id: number) =>
+      setStarred((s) => {
+        const n = new Set(s);
+        if (n.has(id)) n.delete(id);
+        else n.add(id);
+        void updateDeck(deckId, { starred: [...n] });
+        return n;
+      }),
+    [deckId],
+  );
 
   // 赤マスク and 赤シート are separate, mutually-exclusive toggles (tap the active one to turn
   // it off). 赤シート is 縦読み only.
@@ -402,9 +418,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
 
   const doc = docRef.current;
   const currentCards = cardsByPage.get(pageIndex) ?? [];
+  // ★復習 mode masks only the starred answers (review just those); the rest stay revealed.
+  const shownCards = starMode ? currentCards.filter((c) => starred.has(c.id!)) : currentCards;
   // Sheet OFF = show everything: render no mask layer (no dead clicks, clean state).
   const groups: MaskGroup[] = sheetOn
-    ? currentCards.map((c) => ({ id: c.id!, rects: c.rects.length ? c.rects : [c.answerRect] }))
+    ? shownCards.map((c) => ({ id: c.id!, rects: c.rects.length ? c.rects : [c.answerRect] }))
     : [];
   // Staged edits applied to the current page: base masks (minus pending deletes) + pending adds.
   // Pending adds carry a negative temp id so tapping one just removes it from the buffer.
@@ -437,6 +455,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
       });
       m.set(a.pageIndex, arr);
     }
+    displayCardsByPage = m;
+  } else if (starMode) {
+    const m = new Map<number, CardRow[]>();
+    for (const [pg, cards] of cardsByPage) m.set(pg, cards.filter((c) => starred.has(c.id!)));
     displayCardsByPage = m;
   }
   // Each edit pushes the current buffer onto the history stack first, so アンドゥ can restore it.
@@ -538,6 +560,13 @@ export function PageViewer({ deckId }: { deckId: number }) {
               </button>
             )}
             <button
+              className={`btn sm ${starMode ? "primary" : "ghost"}`}
+              onClick={() => setStarMode((v) => !v)}
+              title="★を付けた答えだけを隠して復習"
+            >
+              ★復習
+            </button>
+            <button
               className="btn ghost sm"
               onClick={() => {
                 setEditMode(true);
@@ -599,6 +628,8 @@ export function PageViewer({ deckId }: { deckId: number }) {
           drawKind={drawMode ?? "add"}
           onDrawRect={onDrawRect}
           onDeleteMask={onDeleteMask}
+          starredIds={starred}
+          onStar={(id) => onStar(id as number)}
         />
       )}
       {ready && mode === "scroll" && (
@@ -624,6 +655,8 @@ export function PageViewer({ deckId }: { deckId: number }) {
             drawMode={drawMode}
             onDeleteMask={onDeleteMask}
             onDrawRect={onDrawRect}
+            starred={starred}
+            onStar={onStar}
           />
           {redMode === "sheet" && !editMode && (
             <RedSheet band={band} onChange={setBand} hostRef={sheetHostRef} />

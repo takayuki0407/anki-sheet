@@ -1,4 +1,59 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
+
+// Minimal shape of the pointer events we read — React.PointerEvent satisfies it (duck-typed so
+// this file needs no React-DOM type imports).
+interface PEvent {
+  clientX: number;
+  clientY: number;
+  stopPropagation(): void;
+}
+
+/**
+ * Mask press handling: a quick tap fires onTap (reveal); a ~500ms hold-in-place fires onLong
+ * (star). A drag past a small threshold cancels both (it was a pan, not a press). Returns a
+ * per-mask handler factory: `const press = useMaskPress(...); <div {...press(id)} />`.
+ */
+export function useMaskPress(
+  onTap: (id: string | number) => void,
+  onLong: (id: string | number) => void,
+) {
+  const st = useRef<{ t: ReturnType<typeof setTimeout>; long: boolean; x: number; y: number } | null>(
+    null,
+  );
+  const cancel = () => {
+    if (st.current) {
+      clearTimeout(st.current.t);
+      st.current = null;
+    }
+  };
+  return (id: string | number) => ({
+    onPointerDown: (e: PEvent) => {
+      e.stopPropagation();
+      st.current = {
+        t: setTimeout(() => {
+          if (st.current) st.current.long = true;
+          onLong(id);
+        }, 500),
+        long: false,
+        x: e.clientX,
+        y: e.clientY,
+      };
+    },
+    onPointerMove: (e: PEvent) => {
+      const p = st.current;
+      if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) cancel();
+    },
+    onPointerUp: () => {
+      const p = st.current;
+      if (!p) return;
+      clearTimeout(p.t);
+      st.current = null;
+      if (!p.long) onTap(id);
+    },
+    onPointerLeave: cancel,
+    onPointerCancel: cancel,
+  });
+}
 
 /**
  * Hand-tool panning: press and drag with a mouse or pen to scroll a zoomed page in

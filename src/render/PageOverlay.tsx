@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
-import { useDragPan, useTouchPan, useWheelZoom } from "./viewerGestures";
+import { useDragPan, useMaskPress, useTouchPan, useWheelZoom } from "./viewerGestures";
 import type { Rect } from "../types";
 
 export interface MaskGroup {
@@ -44,6 +44,10 @@ interface Props {
   onDrawRect?: (rect: Rect, page: number) => void;
   /** Delete a mask (false positive) by its group/card id. */
   onDeleteMask?: (id: string | number) => void;
+  // ---- study tracking ----
+  /** Starred answer ids (a ★ badge is shown; long-press a mask toggles it). */
+  starredIds?: ReadonlySet<string | number>;
+  onStar?: (id: string | number) => void;
 }
 
 /**
@@ -70,7 +74,16 @@ export function PageOverlay({
   drawKind = "add",
   onDrawRect,
   onDeleteMask,
+  starredIds = EMPTY,
+  onStar,
 }: Props) {
+  // Tap = reveal (or delete in edit mode); long-press = star (ignored in edit mode).
+  const press = useMaskPress(
+    (id) => (editMode ? onDeleteMask?.(id) : onToggle?.(id)),
+    (id) => {
+      if (!editMode) onStar?.(id);
+    },
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -205,13 +218,14 @@ export function PageOverlay({
                       "--tap-pad": `${Math.max(4, h * 0.3)}px`,
                     } as CSSProperties
                   }
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (editMode) onDeleteMask?.(g.id);
-                    else onToggle?.(g.id);
-                  }}
-                  title={editMode ? "タップで削除" : undefined}
-                />
+                  title={editMode ? "タップで削除" : "タップ＝表示／長押し＝★"}
+                  {...press(g.id)}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {!editMode && i === 0 && starredIds.has(g.id) && (
+                    <span className="star-badge">★</span>
+                  )}
+                </div>
               );
             });
           })}

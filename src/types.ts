@@ -64,6 +64,8 @@ export interface DeckRow {
   lastMode?: "scroll" | "paged";
   /** Persisted reveal state: card ids revealed last session (whole answer reveals together). */
   revealed?: number[];
+  /** Starred answers (card ids) — review-only mode hides just these. */
+  starred?: number[];
   /** Legacy red-sheet on/off (superseded by redMode; kept for back-compat on load). */
   sheetOn?: boolean;
   /** Red overlay mode last used: 赤マスク / 赤シート / OFF. */

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage } from "../pdf/pdfEngine";
 import type { FitMode } from "../render/PageOverlay";
-import { useDragPan, useTouchPan, useWheelZoom } from "../render/viewerGestures";
+import { useDragPan, useMaskPress, useTouchPan, useWheelZoom } from "../render/viewerGestures";
 import type { CardRow, Rect } from "../types";
 
 const MAX_DEVICE_W = 2800;
@@ -37,6 +37,9 @@ interface Props {
   drawMode?: "add" | "delete" | null;
   onDeleteMask?: (id: number) => void;
   onDrawRect?: (rect: Rect, page: number) => void;
+  /** Study tracking: starred answer ids (★ badge) + long-press to toggle. */
+  starred?: ReadonlySet<number>;
+  onStar?: (id: number) => void;
 }
 
 /**
@@ -69,6 +72,8 @@ export function ContinuousView({
   drawMode = null,
   onDeleteMask,
   onDrawRect,
+  starred,
+  onStar,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
@@ -214,6 +219,8 @@ export function ContinuousView({
             drawMode={drawMode}
             onDeleteMask={onDeleteMask}
             onDrawRect={onDrawRect}
+            starred={starred}
+            onStar={onStar}
           />
         ))}
     </div>
@@ -236,6 +243,8 @@ interface SlotProps {
   drawMode?: "add" | "delete" | null;
   onDeleteMask?: (id: number) => void;
   onDrawRect?: (rect: Rect, page: number) => void;
+  starred?: ReadonlySet<number>;
+  onStar?: (id: number) => void;
 }
 
 function PageSlot({
@@ -254,12 +263,22 @@ function PageSlot({
   drawMode = null,
   onDeleteMask,
   onDrawRect,
+  starred,
+  onStar,
 }: SlotProps) {
   const slotRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderToken = useRef(0);
   const [active, setActive] = useState(false);
   const [draw, setDraw] = useState<{ x0: number; y0: number; x: number; y: number } | null>(null);
+  // Tap = reveal (delete in edit mode); long-press = star. CSS makes masks non-interactive in
+  // 赤シート (manual) mode, so these never fire there.
+  const press = useMaskPress(
+    (id) => (editMode ? onDeleteMask?.(id as number) : onToggle(id as number)),
+    (id) => {
+      if (!editMode) onStar?.(id as number);
+    },
+  );
   const height = (cssW * pageH) / pageW;
   const fitScale = cssW > 0 ? cssW / pageW : 0;
 
@@ -340,11 +359,13 @@ function PageSlot({
                     "--tap-pad": `${Math.max(4, h * 0.3)}px`,
                   } as CSSProperties
                 }
-                onClick={
-                  editMode ? () => onDeleteMask?.(c.id!) : manualSheet ? undefined : () => onToggle(c.id!)
-                }
-                title={editMode ? "タップで削除" : undefined}
-              />
+                title={editMode ? "タップで削除" : "タップ＝表示／長押し＝★"}
+                {...press(c.id!)}
+              >
+                {!editMode && i === 0 && starred?.has(c.id!) && (
+                  <span className="star-badge">★</span>
+                )}
+              </div>
             );
           });
         })}
