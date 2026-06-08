@@ -8,7 +8,7 @@ export function SiteFooter() {
       <div className="site-footer-inner">
         <div className="site-footer-brand">
           <strong>Anki-sheet</strong>
-          <span className="muted small">赤シート暗記 — 色付き答えのPDFを、そのまま暗記ツールに</span>
+          <span className="muted small">色付き答えのPDFを、そのまま暗記ツールに</span>
         </div>
         <div className="site-footer-links">
           <button className="link-btn" onClick={() => setView({ name: "home" })}>

@@ -39,7 +39,6 @@ export function App() {
             <img src="/icon.svg" className="brand-icon" alt="" />
             Anki-sheet
           </button>
-          <span className="brand-sub">赤シート暗記</span>
           {view.name !== "info" && (
             <button className="btn ghost sm topbar-info" onClick={() => setView({ name: "info" })}>
               アカウント・情報

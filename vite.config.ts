@@ -22,10 +22,10 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["icon-192.png", "icon-512.png"],
       manifest: {
-        name: "Anki-sheet 赤シート暗記",
+        name: "Anki-sheet",
         short_name: "Anki-sheet",
         lang: "ja",
-        description: "赤シート対応PDFの色付き語句を自動検出して暗記",
+        description: "色付き答えのPDFを取り込むと、答えを自動で検出して隠せる暗記ツール",
         start_url: "./",
         scope: "./",
         display: "standalone",

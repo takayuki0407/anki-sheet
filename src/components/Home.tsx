@@ -3,8 +3,8 @@
 import { useApp } from "../store/session";
 
 const HIGHLIGHTS = [
-  { emoji: "🎯", title: "自動で答えを検出", body: "色を見分けて答えの部分だけをマスク。手作業の塗りつぶしは不要。" },
-  { emoji: "📕", title: "赤シートで暗記", body: "タップで答えを表示、もう一度タップで再び隠す。一括ON/OFFも。" },
+  { emoji: "🎯", title: "自動で答えを検出", body: "色を見分けて答えの部分だけを隠します。手作業の塗りつぶしは不要。" },
+  { emoji: "📕", title: "隠して暗記", body: "答えを隠した状態で通読、タップで確認。隠し方は赤マスクと赤シートから選べます。" },
   { emoji: "☁️", title: "どこでも同期（Pro）", body: "本も学習の進捗も、全ての端末・プラットフォームでクラウド同期。" },
 ];
 
@@ -16,12 +16,12 @@ export function Home() {
     <div className="home">
       <section className="hero">
         <h1 className="hero-title">
-          赤シートで、PDFがそのまま
+          色付き答えのPDFが、そのまま
           <br />
           暗記ノートに。
         </h1>
         <p className="hero-lead">
-          色付きの答えが入ったPDFを取り込むだけ。答えを自動で検出して、デジタル赤シートで隠せます。
+          色付きの答えが入ったPDFを取り込むだけ。答えを自動で検出して隠し、タップで確認しながら暗記できます。
           インストール不要、解析は端末内だけ。
         </p>
         <div className="hero-cta">

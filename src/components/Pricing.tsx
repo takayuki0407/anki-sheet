@@ -13,7 +13,7 @@ const PLANS = [
     tagline: "まずはここから。基本の暗記機能をすべて。",
     features: [
       "本を10冊まで取り込み",
-      "答えの自動検出・デジタル赤シート",
+      "答えの自動検出・赤マスク／赤シート",
       "目次・縦読み／横読み・倍率調整",
       "7日間の無料トライアル",
     ],
@@ -37,7 +37,7 @@ const PLANS = [
 
 const COMPARE = [
   { label: "本の取り込み", standard: "10冊まで", pro: "無制限" },
-  { label: "答えの自動検出・赤シート", standard: "○", pro: "○" },
+  { label: "答えの自動検出・赤マスク／赤シート", standard: "○", pro: "○" },
   { label: "目次・縦横読み・倍率調整", standard: "○", pro: "○" },
   { label: "クラウドストレージ", standard: "—", pro: "5GB" },
   { label: "全端末・全プラットフォームで進捗同期", standard: "—", pro: "○" },
