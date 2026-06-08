@@ -8,6 +8,7 @@ import type {
   DeckRow,
   DetectedCloze,
   PdfRow,
+  QuestionRow,
   Rect,
 } from "../types";
 
@@ -216,4 +217,49 @@ export async function replaceBookmarks(
 
 export async function deleteBookmark(id: number): Promise<void> {
   await db.bookmarks.delete(id);
+}
+
+// ---- AI-generated ○× questions (keyed by the cross-device bookId) ----
+
+/** Replace a single page's questions (initial generation or regeneration → page is replaced). */
+export async function savePageQuestions(
+  bookId: string,
+  pageIndex: number,
+  qs: QuestionRow[],
+): Promise<void> {
+  await db.transaction("rw", db.questions, async () => {
+    await db.questions.where("[bookId+pageIndex]").equals([bookId, pageIndex]).delete();
+    if (qs.length) await db.questions.bulkPut(qs);
+  });
+}
+
+/** Questions for one page. */
+export function getPageQuestions(bookId: string, pageIndex: number): Promise<QuestionRow[]> {
+  return db.questions.where("[bookId+pageIndex]").equals([bookId, pageIndex]).toArray();
+}
+
+/** All questions in a book (the quiz set). */
+export function getBookQuestions(bookId: string): Promise<QuestionRow[]> {
+  return db.questions.where("bookId").equals(bookId).toArray();
+}
+
+/** Per-page question counts for a book (drives the generate/solve status UI). */
+export async function bookQuestionCounts(bookId: string): Promise<Map<number, number>> {
+  const rows = await getBookQuestions(bookId);
+  const m = new Map<number, number>();
+  for (const q of rows) m.set(q.pageIndex, (m.get(q.pageIndex) ?? 0) + 1);
+  return m;
+}
+
+/** Replace ALL of a book's questions (cloud restore for Pro+). */
+export async function putBookQuestions(bookId: string, qs: QuestionRow[]): Promise<void> {
+  await db.transaction("rw", db.questions, async () => {
+    await db.questions.where("bookId").equals(bookId).delete();
+    if (qs.length) await db.questions.bulkPut(qs);
+  });
+}
+
+/** Delete a book's questions (on book delete). */
+export async function deleteBookQuestions(bookId: string): Promise<void> {
+  await db.questions.where("bookId").equals(bookId).delete();
 }

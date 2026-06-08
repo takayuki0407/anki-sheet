@@ -20,7 +20,7 @@ export function syncErrorMessage(e: unknown): string {
   return `取得に失敗しました（${m}）。`;
 }
 
-async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
+export async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = await getIdToken();
   if (!token) throw new Error("not_signed_in");
   // Default to JSON, but let callers override Content-Type (e.g. the binary PDF upload).

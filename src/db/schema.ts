@@ -1,5 +1,13 @@
 import Dexie, { type Table } from "dexie";
-import type { BookmarkRow, CardRow, CoverRow, DeckRow, MetaRow, PdfRow } from "../types";
+import type {
+  BookmarkRow,
+  CardRow,
+  CoverRow,
+  DeckRow,
+  MetaRow,
+  PdfRow,
+  QuestionRow,
+} from "../types";
 
 export class AnkiSheetDB extends Dexie {
   decks!: Table<DeckRow, number>;
@@ -8,6 +16,7 @@ export class AnkiSheetDB extends Dexie {
   bookmarks!: Table<BookmarkRow, number>;
   covers!: Table<CoverRow, number>;
   meta!: Table<MetaRow, string>;
+  questions!: Table<QuestionRow, string>;
 
   constructor() {
     super("ankiSheet");
@@ -30,6 +39,10 @@ export class AnkiSheetDB extends Dexie {
     // v4: cached cover thumbnails (keyed by deckId).
     this.version(4).stores({
       covers: "deckId",
+    });
+    // v5: AI-generated ○× questions (keyed by uuid; looked up by book + page).
+    this.version(5).stores({
+      questions: "id, bookId, [bookId+pageIndex]",
     });
   }
 }

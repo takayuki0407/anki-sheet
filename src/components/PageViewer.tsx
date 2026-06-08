@@ -572,6 +572,9 @@ export function PageViewer({ deckId }: { deckId: number }) {
         <button className="btn ghost sm" onClick={() => setTocOpen(true)}>
           目次
         </button>
+        <button className="btn ghost sm" onClick={() => setView({ name: "quiz", deckId })}>
+          問題
+        </button>
         <span className="book-title-bar" title={deckName}>
           {deckName}
         </span>

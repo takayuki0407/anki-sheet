@@ -14,6 +14,7 @@ import { DeckList } from "./components/DeckList";
 import { ImportWizard } from "./components/ImportWizard";
 import { PageViewer } from "./components/PageViewer";
 import { Settings } from "./components/Settings";
+import { QuizScreen } from "./components/QuizScreen";
 import { Info } from "./components/Info";
 import { Login } from "./components/Login";
 import { DowngradeSelect } from "./components/DowngradeSelect";
@@ -30,7 +31,7 @@ const MARKETING = new Set(["home", "service", "pricing"]);
 const PRIVATE = import.meta.env.VITE_PUBLIC !== "true";
 
 // App pages (vs marketing/login/info) require sign-in.
-const APP_VIEWS = new Set(["decks", "import", "viewer", "settings"]);
+const APP_VIEWS = new Set(["decks", "import", "viewer", "settings", "quiz"]);
 
 export function App() {
   const view = useApp((s) => s.view);
@@ -102,6 +103,7 @@ export function App() {
             {view.name === "import" && <ImportWizard />}
             {view.name === "viewer" && <PageViewer deckId={view.deckId} />}
             {view.name === "settings" && <Settings deckId={view.deckId} />}
+            {view.name === "quiz" && <QuizScreen deckId={view.deckId} />}
             {view.name === "info" && <Info />}
             {view.name === "login" && <Login />}
           </>

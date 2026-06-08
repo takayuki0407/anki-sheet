@@ -6,6 +6,7 @@ export type View =
   | { name: "import" }
   | { name: "viewer"; deckId: number }
   | { name: "settings"; deckId: number }
+  | { name: "quiz"; deckId: number }
   | { name: "info" }
   | { name: "login" }
   | { name: "pricing" }
@@ -34,6 +35,8 @@ export function viewToPath(view: View): string {
       return `/app/read/${view.deckId}`;
     case "settings":
       return `/app/settings/${view.deckId}`;
+    case "quiz":
+      return `/app/quiz/${view.deckId}`;
     case "info":
       return "/info";
     case "login":
@@ -55,6 +58,8 @@ export function pathToView(path: string): View {
   if (read) return { name: "viewer", deckId: Number(read[1]) };
   const settings = p.match(/^\/app\/settings\/(\d+)$/);
   if (settings) return { name: "settings", deckId: Number(settings[1]) };
+  const quiz = p.match(/^\/app\/quiz\/(\d+)$/);
+  if (quiz) return { name: "quiz", deckId: Number(quiz[1]) };
   return { name: "home" };
 }
 

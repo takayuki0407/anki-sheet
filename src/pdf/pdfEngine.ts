@@ -105,6 +105,24 @@ export async function runCandidates(
   return out;
 }
 
+/** Extract a page's plain text for AI question generation (pdf.js getTextContent). pageIndex is
+ * 0-based (pdf.js pages are 1-based). Uses pdf.js's own hasEOL to reconstruct line breaks. */
+export async function getPageText(doc: PDFDocumentProxy, pageIndex: number): Promise<string> {
+  const page = await doc.getPage(pageIndex + 1);
+  try {
+    const tc = await page.getTextContent();
+    let out = "";
+    for (const item of tc.items) {
+      if (!("str" in item)) continue; // skip TextMarkedContent
+      out += item.str;
+      if (item.hasEOL) out += "\n";
+    }
+    return out.replace(/\n{3,}/g, "\n\n").trim();
+  } finally {
+    page.cleanup();
+  }
+}
+
 // Render detection at a lower scale on memory-constrained touch devices (iOS Safari
 // jettisons the page otherwise). Answer-term detection is unaffected: a glyph's
 // in-band pixel count stays well above the threshold even at this scale.
@@ -137,6 +155,29 @@ export async function renderCover(data: ArrayBuffer | Blob, maxWidth = 240): Pro
     return blob;
   } finally {
     await doc.loadingTask.destroy();
+  }
+}
+
+/** Render any page of an already-open PDF to a small JPEG thumbnail (the quiz page picker). */
+export async function renderPageImage(
+  doc: PDFDocumentProxy,
+  pageIndex: number,
+  maxWidth = 200,
+): Promise<Blob> {
+  const page = await doc.getPage(pageIndex + 1);
+  try {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const vp1 = page.getViewport({ scale: 1 });
+    const canvas = await renderPage(page, (maxWidth / vp1.width) * dpr);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.8),
+    );
+    canvas.width = 0;
+    canvas.height = 0;
+    if (!blob) throw new Error("page render failed");
+    return blob;
+  } finally {
+    page.cleanup();
   }
 }
 

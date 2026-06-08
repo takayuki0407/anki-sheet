@@ -88,6 +88,19 @@ export interface PdfRow {
   pageH: number;
 }
 
+/** An AI-generated true/false (○×) question, keyed by the cross-device bookId so it syncs (Pro+)
+ * and matches the server `questions` table. One page holds at most 6; regeneration replaces a page. */
+export interface QuestionRow {
+  id: string; // uuid (server-assigned)
+  bookId: string;
+  pageIndex: number;
+  statement: string;
+  answer: "正" | "誤";
+  explanation: string;
+  source: string;
+  createdAt: number;
+}
+
 /** One detected answer (the thing hidden under the red sheet). */
 export interface CardRow {
   id?: number;

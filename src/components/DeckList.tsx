@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   answerCount,
+  deleteBookQuestions,
   deleteDeck,
   getCover,
   getDeckPdf,
@@ -326,6 +327,7 @@ function DeckBook({ deck, count }: { deck: DeckRow; count: number }) {
     // devices keep it and this device can re-download it later. Permanent cloud deletion is the
     // explicit「クラウドから削除」action in the cloud section.
     await deleteDeck(deck.id!);
+    if (deck.bookId) void deleteBookQuestions(deck.bookId).catch(() => {}); // drop this device's AI questions
   };
   const toggleFav = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -357,6 +359,9 @@ function DeckBook({ deck, count }: { deck: DeckRow; count: number }) {
       </div>
       <div className="book-meta">{count} 個の暗記</div>
       <div className="book-actions">
+        <button className="btn ghost sm" onClick={() => setView({ name: "quiz", deckId: deck.id! })}>
+          問題
+        </button>
         <button
           className="btn ghost sm"
           onClick={() => setView({ name: "settings", deckId: deck.id! })}
