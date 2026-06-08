@@ -127,6 +127,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const user = useAuth((s) => s.user);
   // Reveal keys pulled from the cloud, applied once the page's cards have loaded (see effect).
   const [pendingRevealKeys, setPendingRevealKeys] = useState<string[] | null>(null);
+  const [pendingStarKeys, setPendingStarKeys] = useState<string[] | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [errMsg, setErrMsg] = useState("");
   const [pdf, setPdf] = useState<PdfRow>();
@@ -228,13 +229,14 @@ export function PageViewer({ deckId }: { deckId: number }) {
         if (useAuth.getState().user && d.bookId) {
           const cloud = await getProgress(d.bookId).catch(() => null);
           if (!cancelled && cloud && cloud.updatedAt > (d.progressAt ?? 0)) {
-            const { revealedKeys, ...c } = cloud.data;
+            const { revealedKeys, starredKeys, ...c } = cloud.data;
             if (typeof c.lastPage === "number")
               setPageIndex(Math.max(0, Math.min(p.pageCount - 1, c.lastPage)));
             if (c.lastMode) setMode(c.lastMode);
             if (c.redMode) setRedMode(c.redMode);
             if (c.sheetBand) setBand(c.sheetBand);
             setPendingRevealKeys(revealedKeys ?? []); // applied once this book's cards have loaded
+            setPendingStarKeys(starredKeys ?? []);
             void updateDeck(deckId, { ...c, progressAt: cloud.updatedAt });
           }
         }
@@ -269,6 +271,16 @@ export function PageViewer({ deckId }: { deckId: number }) {
     setPendingRevealKeys(null);
   }, [pendingRevealKeys, allCards, cardsByPage, deckId]);
 
+  // Apply cloud star keys once this book's cards have loaded (maps portable keys -> local ids).
+  useEffect(() => {
+    if (!pendingStarKeys || !allCards || allCards.length === 0) return;
+    const { keyToId } = cardKeyMaps(cardsByPage);
+    const ids = pendingStarKeys.map((k) => keyToId.get(k)).filter((x): x is number => x != null);
+    setStarred(new Set(ids));
+    void updateDeck(deckId, { starred: ids });
+    setPendingStarKeys(null);
+  }, [pendingStarKeys, allCards, cardsByPage, deckId]);
+
   const pageCount = pdf?.pageCount ?? 1;
   const percent = pageCount > 0 ? Math.round(((pageIndex + 1) / pageCount) * 100) : 0;
   const goTo = (p: number) => setPageIndex(Math.max(0, Math.min(pageCount - 1, p)));
@@ -295,23 +307,24 @@ export function PageViewer({ deckId }: { deckId: number }) {
   // Pro cross-device progress: push reading state + revealed (as portable keys) to the cloud
   // (debounced). Skip while a cloud pull is still pending, so we don't overwrite it with stale local.
   useEffect(() => {
-    if (status !== "ready" || !user || !bookIdRef.current || pendingRevealKeys) return;
+    if (status !== "ready" || !user || !bookIdRef.current || pendingRevealKeys || pendingStarKeys)
+      return;
     const id = setTimeout(() => {
       const { idToKey } = cardKeyMaps(cardsByPage);
-      const revealedKeys = [...revealed]
-        .map((i) => idToKey.get(i))
-        .filter((x): x is string => !!x);
+      const toKeys = (ids: Iterable<number>) =>
+        [...ids].map((i) => idToKey.get(i)).filter((x): x is string => !!x);
       void updateDeck(deckId, { progressAt: Date.now() });
       void putProgress(bookIdRef.current!, {
         lastPage: pageIndex,
         lastMode: mode,
         redMode,
         sheetBand: band,
-        revealedKeys,
+        revealedKeys: toKeys(revealed),
+        starredKeys: toKeys(starred),
       }).catch(() => {});
     }, 1500);
     return () => clearTimeout(id);
-  }, [pageIndex, mode, redMode, band, revealed, status, deckId, user, pendingRevealKeys, cardsByPage]);
+  }, [pageIndex, mode, redMode, band, revealed, starred, status, deckId, user, pendingRevealKeys, pendingStarKeys, cardsByPage]);
   const exit = () => {
     if (status === "ready") {
       void updateDeck(deckId, {
@@ -323,14 +336,18 @@ export function PageViewer({ deckId }: { deckId: number }) {
       });
       if (user && bookIdRef.current) {
         const { idToKey } = cardKeyMaps(cardsByPage);
+        const toKeys = (ids: Iterable<number>) =>
+          [...ids].map((i) => idToKey.get(i)).filter((x): x is string => !!x);
         void putProgress(bookIdRef.current, {
           lastPage: pageIndex,
           lastMode: mode,
           redMode,
           sheetBand: band,
-          revealedKeys: [...revealed].map((i) => idToKey.get(i)).filter((x): x is string => !!x),
+          revealedKeys: toKeys(revealed),
+          starredKeys: toKeys(starred),
         }).catch(() => {});
       }
+
     }
     setView({ name: "decks" });
   };
