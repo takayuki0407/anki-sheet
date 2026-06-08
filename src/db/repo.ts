@@ -199,6 +199,21 @@ export async function renameBookmark(id: number, title: string): Promise<void> {
   await db.bookmarks.update(id, { title });
 }
 
+/** Replace ALL of a deck's bookmarks (used when pulling synced bookmarks from the cloud). */
+export async function replaceBookmarks(
+  deckId: number,
+  items: { title: string; pageIndex: number }[],
+): Promise<void> {
+  const now = Date.now();
+  await db.transaction("rw", db.bookmarks, async () => {
+    await db.bookmarks.where("deckId").equals(deckId).delete();
+    if (items.length)
+      await db.bookmarks.bulkAdd(
+        items.map((b) => ({ deckId, pageIndex: b.pageIndex, title: b.title, createdAt: now })),
+      );
+  });
+}
+
 export async function deleteBookmark(id: number): Promise<void> {
   await db.bookmarks.delete(id);
 }

@@ -11,6 +11,7 @@ import {
   getDeckPdf,
   listBookmarks,
   renameBookmark,
+  replaceBookmarks,
   updateDeck,
 } from "../db/repo";
 import { loadPdf } from "../pdf/pdfEngine";
@@ -229,7 +230,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
         if (useAuth.getState().user && d.bookId) {
           const cloud = await getProgress(d.bookId).catch(() => null);
           if (!cancelled && cloud && cloud.updatedAt > (d.progressAt ?? 0)) {
-            const { revealedKeys, starredKeys, ...c } = cloud.data;
+            const { revealedKeys, starredKeys, bookmarks: cloudBms, ...c } = cloud.data;
             if (typeof c.lastPage === "number")
               setPageIndex(Math.max(0, Math.min(p.pageCount - 1, c.lastPage)));
             if (c.lastMode) setMode(c.lastMode);
@@ -237,6 +238,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
             if (c.sheetBand) setBand(c.sheetBand);
             setPendingRevealKeys(revealedKeys ?? []); // applied once this book's cards have loaded
             setPendingStarKeys(starredKeys ?? []);
+            if (cloudBms) void replaceBookmarks(deckId, cloudBms).catch(() => {}); // synced しおり
             void updateDeck(deckId, { ...c, progressAt: cloud.updatedAt });
           }
         }
@@ -321,10 +323,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
         sheetBand: band,
         revealedKeys: toKeys(revealed),
         starredKeys: toKeys(starred),
+        bookmarks: bookmarks.map((b) => ({ title: b.title, pageIndex: b.pageIndex })),
       }).catch(() => {});
     }, 1500);
     return () => clearTimeout(id);
-  }, [pageIndex, mode, redMode, band, revealed, starred, status, deckId, user, pendingRevealKeys, pendingStarKeys, cardsByPage]);
+  }, [pageIndex, mode, redMode, band, revealed, starred, bookmarks, status, deckId, user, pendingRevealKeys, pendingStarKeys, cardsByPage]);
   const exit = () => {
     if (status === "ready") {
       void updateDeck(deckId, {
@@ -345,6 +348,7 @@ export function PageViewer({ deckId }: { deckId: number }) {
           sheetBand: band,
           revealedKeys: toKeys(revealed),
           starredKeys: toKeys(starred),
+          bookmarks: bookmarks.map((b) => ({ title: b.title, pageIndex: b.pageIndex })),
         }).catch(() => {});
       }
 
