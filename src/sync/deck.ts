@@ -8,10 +8,19 @@ import {
   importBookmarks,
   importDeck,
   listBookmarks,
+  listDecks,
   redetectDeck,
   updateDeck,
 } from "../db/repo";
-import { getBlob, getContent, putBlob, putContent, type AccountBook } from "./api";
+import {
+  getBlob,
+  getContent,
+  listBooks,
+  putBlob,
+  putContent,
+  unregisterBook,
+  type AccountBook,
+} from "./api";
 import type { DeckColorConfig, DetectedCloze } from "../types";
 
 interface DeckContent {
@@ -24,6 +33,22 @@ interface DeckContent {
   bookmarks: { title: string; pageIndex: number }[];
   /** Local edit time of this content (epoch ms), set on upload — drives content last-write-wins. */
   contentAt?: number;
+}
+
+/** On logout, release THIS device's book slots — but ONLY for a non-Pro (Standard) account, whose
+ * books are slot-only (no cloud file). Pro/admin keep their slots + R2 files so the books re-download
+ * after re-login / on other devices. Best-effort; never throws. */
+export async function releaseLocalSlotsOnLogout(): Promise<void> {
+  let unlimited = true; // assume Pro/admin (keep) unless we confirm Standard
+  try {
+    const acct = await listBooks();
+    unlimited = acct.tier === "pro" || acct.tier === "admin";
+  } catch {
+    return; // can't tell the tier → don't risk deleting a Pro account's cloud files
+  }
+  if (unlimited) return;
+  const decks = await listDecks();
+  for (const d of decks) if (d.bookId) await unregisterBook(d.bookId).catch(() => {});
 }
 
 /** Build the content JSON (everything needed to rebuild the deck except the PDF) from local state. */

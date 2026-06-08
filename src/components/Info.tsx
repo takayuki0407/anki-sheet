@@ -5,6 +5,7 @@ import { useApp } from "../store/session";
 import { deleteAccount, signOutUser, useAuth } from "../auth/useAuth";
 import { listBooks, type AccountBooks } from "../sync/api";
 import { clearAllLocalData } from "../db/backup";
+import { releaseLocalSlotsOnLogout } from "../sync/deck";
 
 const SUPPORT_EMAIL = "zabieru.0407@gmail.com";
 
@@ -66,6 +67,7 @@ export function Info() {
       )
     )
       return;
+    await releaseLocalSlotsOnLogout(); // free Standard slots while the token is still valid
     await signOutUser();
     await clearAllLocalData();
     setView({ name: "decks" }); // empty bookshelf, signed out
