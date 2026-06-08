@@ -117,11 +117,13 @@ export function DeckList() {
   const importRef = useRef<HTMLInputElement>(null);
   const user = useAuth((s) => s.user);
 
-  // Books in the account that aren't on THIS device yet → offer a one-tap cloud download (Pro).
+  // Books in the account that aren't on THIS device yet → offer a one-tap cloud download (Pro only).
   const [cloud, setCloud] = useState<AccountBook[] | null>(null);
+  const [cloudPro, setCloudPro] = useState(false);
   useEffect(() => {
     if (!user) {
       setCloud(null);
+      setCloudPro(false);
       return;
     }
     let live = true;
@@ -129,6 +131,7 @@ export function DeckList() {
       .then(async (u) => {
         if (!live) return;
         setCloud(u.books);
+        setCloudPro(u.tier === "pro" || u.tier === "admin"); // cloud download/restore is Pro-only
         // Reconcile favorite / latest-opened set on other devices ONCE per fetch, against a fresh
         // read of the local decks (not the live query) so a later optimistic toggle isn't clobbered
         // by a stale snapshot. Server is authoritative for favorite; opened_at takes the most recent.
@@ -226,20 +229,16 @@ export function DeckList() {
         </div>
       )}
 
-      {remote.length > 0 && (
+      {cloudPro && remote.some((b) => b.size > 0) && (
         <div className="cloud-section">
           <h3 className="section">クラウド（他の端末の本）</h3>
-          <p className="muted small">
-            アカウントに登録された本です。クラウドに保存済み（Proで取り込み）の本は取り込めます。ファイルの無い本（Standardの枠のみ）は削除して枠を空けられます。
-          </p>
+          <p className="muted small">同じアカウントの本です。クリックでこの端末に取り込めます。</p>
           <ul className="cloud-list">
-            {remote.map((b) => (
-              <CloudBook
-                key={b.book_id}
-                book={b}
-                onRemoved={(id) => setCloud((c) => (c ? c.filter((x) => x.book_id !== id) : c))}
-              />
-            ))}
+            {remote
+              .filter((b) => b.size > 0)
+              .map((b) => (
+                <CloudBook key={b.book_id} book={b} />
+              ))}
           </ul>
         </div>
       )}
@@ -247,8 +246,8 @@ export function DeckList() {
   );
 }
 
-/** A book that exists in the account but not on this device — one tap downloads + rebuilds it. */
-function CloudBook({ book, onRemoved }: { book: AccountBook; onRemoved: (id: string) => void }) {
+/** A Pro cloud book not on this device — one tap downloads + rebuilds it (Pro-only section). */
+function CloudBook({ book }: { book: AccountBook }) {
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const download = async () => {
@@ -261,35 +260,13 @@ function CloudBook({ book, onRemoved }: { book: AccountBook; onRemoved: (id: str
       setBusy(false);
     }
   };
-  // Standard: the book is only a registered slot (no cloud file) → can't download, but can be
-  // released to free the account-global count.
-  const remove = async () => {
-    setBusy(true);
-    setErrMsg(null);
-    try {
-      await unregisterBook(book.book_id);
-      onRemoved(book.book_id);
-    } catch (e) {
-      setErrMsg(syncErrorMessage(e));
-      setBusy(false);
-    }
-  };
-  // A cloud PDF exists (uploaded while Pro) → downloadable (GET is owner-open, so even a
-  // since-downgraded Standard account can re-download). size 0 = slot-only → offer to remove.
-  const hasFile = book.size > 0;
   return (
     <li className="cloud-item">
       <span className="cloud-name">{book.name || "（無題）"}</span>
       <span className="cloud-device">{book.device ?? ""}</span>
-      {hasFile ? (
-        <button className="btn sm" onClick={download} disabled={busy}>
-          {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
-        </button>
-      ) : (
-        <button className="btn ghost sm" onClick={remove} disabled={busy}>
-          {busy ? "削除中…" : "アカウントから削除"}
-        </button>
-      )}
+      <button className="btn sm" onClick={download} disabled={busy}>
+        {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
+      </button>
       {errMsg && <p className="cloud-error">{errMsg}</p>}
     </li>
   );

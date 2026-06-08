@@ -39,19 +39,9 @@ export const onRequestPost: Fn = async (ctx) => {
   const bookId = typeof body.book_id === "string" ? body.book_id : "";
   if (!bookId) return json({ error: "book_id_required" }, 400);
 
-  // New slots count against the cap; an existing book_id is just an update (no count change).
-  const existing = await ctx.env.DB.prepare("SELECT 1 AS x FROM books WHERE uid = ? AND book_id = ?")
-    .bind(uid, bookId)
-    .first();
-  if (!existing) {
-    const limit = limitFor(await getTier(ctx.env, uid, ctx.data.email));
-    const countRow = await ctx.env.DB.prepare("SELECT COUNT(*) AS c FROM books WHERE uid = ?")
-      .bind(uid)
-      .first<{ c: number }>();
-    const count = Number(countRow?.c ?? 0);
-    if (count >= limit) return json({ error: "limit_reached", count, limit }, 403);
-  }
-
+  // Per-device limit (client-enforced): the account-global registry no longer caps the count —
+  // each device limits its OWN local library to the tier's allowance (Standard = 10/device). The
+  // registry just tracks books (+ device labels + Pro cloud files), so registration never 403s here.
   await ctx.env.DB.prepare(
     `INSERT INTO books (uid, book_id, name, size, page_count, device, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
