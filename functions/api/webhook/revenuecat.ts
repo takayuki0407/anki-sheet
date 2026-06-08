@@ -36,11 +36,20 @@ export const onRequestPost: Fn = async (ctx) => {
   else if (REVOKE.has(e.type)) tier = "standard";
   if (tier === null) return json({ ok: true }); // e.g. CANCELLATION — keep current access
 
+  const now = Date.now();
+  // downgraded_at = start of the 6-month cloud-retention clock. Pro CLEARS it (NULL); a non-Pro
+  // tier SETS it on the FIRST downgrade and keeps that earliest time on later non-Pro events (so a
+  // standard renewal doesn't keep resetting the clock). The retention Worker reads this.
+  const downgradedAt = tier === "pro" ? null : now;
   await ctx.env.DB.prepare(
-    `INSERT INTO users (uid, tier, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(uid) DO UPDATE SET tier = excluded.tier, updated_at = excluded.updated_at`,
+    `INSERT INTO users (uid, tier, updated_at, downgraded_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(uid) DO UPDATE SET
+       tier = excluded.tier,
+       updated_at = excluded.updated_at,
+       downgraded_at = CASE WHEN excluded.tier = 'pro' THEN NULL
+                            ELSE COALESCE(users.downgraded_at, ?) END`,
   )
-    .bind(e.app_user_id, tier, Date.now())
+    .bind(e.app_user_id, tier, now, downgradedAt, now)
     .run();
   return json({ ok: true });
 };

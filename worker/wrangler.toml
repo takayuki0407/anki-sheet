@@ -1,0 +1,21 @@
+# Standalone Worker for the cloud-data retention cron (Pages Functions can't run on a schedule).
+# Bound to the SAME D1 + R2 as the anki-sheet Pages backend.
+# Deploy:  wrangler deploy --config worker/wrangler.toml
+name = "anki-sheet-retention"
+main = "retention.ts"
+compatibility_date = "2026-06-01"
+
+# Once a day (03:23 UTC) — purge cloud data of accounts non-Pro for > 6 months.
+[triggers]
+crons = ["23 3 * * *"]
+
+# SAME D1 as the Pages backend (anki-sheet-db). binding -> env.DB
+[[d1_databases]]
+binding = "DB"
+database_name = "anki-sheet-db"
+database_id = "576b11df-f300-4ead-9b61-383ae1280c89"
+
+# SAME R2 bucket as the Pages backend (anki-sheet-pdfs). binding -> env.PDFS
+[[r2_buckets]]
+binding = "PDFS"
+bucket_name = "anki-sheet-pdfs"

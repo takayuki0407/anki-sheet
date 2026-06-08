@@ -1,7 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
 import { useApp } from "./store/session";
 import { requestPersistentStorage } from "./db/backup";
 import { initAuth, useAuth } from "./auth/useAuth";
+import { listBooks, type AccountBooks } from "./sync/api";
+import { listDecks } from "./db/repo";
 import { Home } from "./components/Home";
 import { Service } from "./components/Service";
 import { Pricing } from "./components/Pricing";
@@ -13,6 +16,7 @@ import { PageViewer } from "./components/PageViewer";
 import { Settings } from "./components/Settings";
 import { Info } from "./components/Info";
 import { Login } from "./components/Login";
+import { DowngradeSelect } from "./components/DowngradeSelect";
 import { ComingSoon } from "./components/ComingSoon";
 
 // The marketing site (Home / Service / Pricing) gets the nav + footer chrome; the app pages
@@ -38,10 +42,32 @@ export function App() {
     void requestPersistentStorage();
     initAuth(); // start the Firebase auth listener
   }, []);
+  // Per-device over-limit gate inputs: the account's tier/limit (server) + THIS device's book count
+  // (live). A non-Pro account holding MORE local books than the limit is FORCED to trim down before
+  // using the app (covers a leftover over-limit state, or a future Pro→Standard downgrade). Both
+  // are guarded for PRIVATE so the coming-soon build never touches the network or IndexedDB.
+  const [tierInfo, setTierInfo] = useState<AccountBooks | null>(null);
+  useEffect(() => {
+    if (PRIVATE || !user) {
+      setTierInfo(null);
+      return;
+    }
+    let live = true;
+    void listBooks()
+      .then((u) => live && setTierInfo(u))
+      .catch(() => live && setTierInfo(null)); // fail open — don't trap the user on a network error
+    return () => {
+      live = false;
+    };
+  }, [user]);
+  const localCount = useLiveQuery(async () => (PRIVATE ? 0 : (await listDecks()).length), []) ?? 0;
   if (PRIVATE) return <ComingSoon />;
   const isMarketing = MARKETING.has(view.name);
   // Sign-in REQUIRED for the app pages (the bookshelf can't be used without an account).
   const needsLogin = APP_VIEWS.has(view.name) && authReady && !user;
+  // Over the per-device limit → force the trim screen (not on the public marketing pages).
+  const overLimit =
+    !!user && !isMarketing && !!tierInfo && !tierInfo.unlimited && localCount > tierInfo.limit;
   // The reader is full-screen: no app chrome above the page, maximizing vertical reading space.
   // The viewer renders its own back / controls row.
   const isViewer = view.name === "viewer";
@@ -65,6 +91,8 @@ export function App() {
       <main className="content">
         {needsLogin ? (
           <Login />
+        ) : overLimit ? (
+          <DowngradeSelect keepLimit={tierInfo?.limit ?? 10} />
         ) : (
           <>
             {view.name === "home" && <Home />}

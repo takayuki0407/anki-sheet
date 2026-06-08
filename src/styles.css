@@ -1780,3 +1780,48 @@ body {
     background: #3a3228;
   }
 }
+
+/* ---- Forced-trim (downgrade) selection screen ---- */
+.downgrade .book-grid {
+  margin-top: 14px;
+}
+.trim-book {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 6px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.trim-book .book-cover {
+  width: 100%;
+}
+.trim-book.sel {
+  border-color: var(--sand);
+  background: rgba(212, 163, 115, 0.12);
+}
+.trim-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sand);
+  color: #fff;
+  font-weight: 800;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.downgrade-actions {
+  margin-top: 20px;
+  justify-content: space-between;
+}
