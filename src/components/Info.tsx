@@ -246,6 +246,11 @@ export function Info() {
         <h3 className="section">このアプリについて</h3>
         <div className="info-card">
           <p className="small">Anki-sheet（赤シート暗記）</p>
+          <p className="small">
+            <button className="linklike" onClick={() => setView({ name: "home" })}>
+              製品紹介・料金プランページ →
+            </button>
+          </p>
           <p className="muted small">build {__BUILD_ID__}</p>
           <p className="muted small">
             pdf.js — Apache-2.0 (© Mozilla) ／ React — MIT ／ Dexie・zustand・colord — MIT

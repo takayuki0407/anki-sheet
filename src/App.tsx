@@ -26,20 +26,25 @@ export function App() {
     initAuth(); // start the Firebase auth listener
   }, []);
   const isMarketing = MARKETING.has(view.name);
+  // The reader is full-screen: no app chrome above the page, maximizing vertical reading space.
+  // The viewer renders its own back / controls row.
+  const isViewer = view.name === "viewer";
   return (
     <div className={isMarketing ? "app marketing" : "app"}>
       {isMarketing ? (
         <MarketingNav current={view.name} />
-      ) : (
+      ) : isViewer ? null : (
         <header className="topbar">
-          <button className="brand brand-btn" onClick={() => setView({ name: "home" })}>
+          <button className="brand brand-btn" onClick={() => setView({ name: "decks" })}>
             <img src="/icon.svg" className="brand-icon" alt="" />
             Anki-sheet
           </button>
           <span className="brand-sub">赤シート暗記</span>
-          <button className="btn ghost sm topbar-info" onClick={() => setView({ name: "info" })}>
-            アカウント・情報
-          </button>
+          {view.name !== "info" && (
+            <button className="btn ghost sm topbar-info" onClick={() => setView({ name: "info" })}>
+              アカウント・情報
+            </button>
+          )}
         </header>
       )}
       <main className="content">
