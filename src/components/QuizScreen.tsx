@@ -19,6 +19,7 @@ import {
   type Density,
   type GenUsage,
 } from "../ai/generate";
+import { ensureAiConsent } from "../ai/consent";
 import type { DeckRow, QuestionRow } from "../types";
 
 const DENSITY_LABELS: { key: Density; label: string }[] = [
@@ -215,6 +216,7 @@ function GenerateTab({
 
   const run = async () => {
     if (!bookId || !doc || !toGenerate.length || progress) return;
+    if (!ensureAiConsent()) return; // one-time opt-in: generation sends page text to the server/AI
     setMsg(null);
     const errors: number[] = [];
     let done = 0;
