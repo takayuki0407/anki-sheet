@@ -258,19 +258,21 @@ export function DeckList() {
         </div>
       )}
 
-      {cloudPro && remote.length > 0 && (
+      {remote.length > 0 && (
         <div className="cloud-section">
           <h3 className="section">クラウド（この端末にない本）</h3>
           <p className="muted small">
-            同じアカウントの本です。「この端末に取り込む」で追加、「クラウドから削除」で
-            すべての端末から完全に削除します。クラウド保存のない本（他端末のみ・アップロード未完了）は
-            ダウンロードできませんが、「クラウドから削除」で枠を空けられます。
+            同じアカウントの本です。
+            {cloudPro && "「この端末に取り込む」で追加、"}
+            「クラウドから削除」ですべての端末から完全に削除します。クラウド保存のない本
+            （他端末のみ・アップロード未完了）はダウンロードできませんが、「クラウドから削除」で枠を空けられます。
           </p>
           <ul className="cloud-list">
             {remote.map((b) => (
               <CloudBook
                 key={b.book_id}
                 book={b}
+                canDownload={cloudPro}
                 onRemoved={(id) => setCloud((c) => c?.filter((x) => x.book_id !== id) ?? null)}
               />
             ))}
@@ -283,7 +285,15 @@ export function DeckList() {
 
 /** A Pro cloud book not on this device — download it back, or permanently remove it from the cloud
  * (which deletes the R2 file + registry row for the whole account). */
-function CloudBook({ book, onRemoved }: { book: AccountBook; onRemoved: (bookId: string) => void }) {
+function CloudBook({
+  book,
+  canDownload,
+  onRemoved,
+}: {
+  book: AccountBook;
+  canDownload: boolean;
+  onRemoved: (bookId: string) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const download = async () => {
@@ -316,13 +326,14 @@ function CloudBook({ book, onRemoved }: { book: AccountBook; onRemoved: (bookId:
       setBusy(false);
     }
   };
-  // size === 0 → no cloud blob (other-device-only / never uploaded): can't download, only remove.
+  // Download needs a cloud blob (size>0) AND a tier that can restore (Pro+). size=0 = no cloud copy
+  // (other-device-only / never uploaded). Either way「クラウドから削除」frees the account slot.
   const hasBlob = book.size > 0;
   return (
     <li className="cloud-item">
       <span className="cloud-name">{book.name || "（無題）"}</span>
       <span className="cloud-device">{hasBlob ? (book.device ?? "") : "クラウド保存なし"}</span>
-      {hasBlob && (
+      {hasBlob && canDownload && (
         <button className="btn sm" onClick={download} disabled={busy}>
           {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
         </button>
