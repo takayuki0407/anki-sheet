@@ -218,6 +218,23 @@ function GenerateTab({
     if (!bookId || !doc || !toGenerate.length || progress) return;
     if (!ensureAiConsent()) return; // one-time opt-in: generation sends page text to the server/AI
     setMsg(null);
+    const d = doc; // non-null after the guard (keep the narrowing inside the helper closure)
+    const CONTEXT_CHARS = 700;
+    // Cache page text so a page fetched as a neighbor isn't re-extracted as a body (and vice versa).
+    const textCache = new Map<number, string>();
+    const pageTextOf = async (idx: number): Promise<string> => {
+      if (idx < 0 || idx >= pageCount) return "";
+      const hit = textCache.get(idx);
+      if (hit !== undefined) return hit;
+      let t = "";
+      try {
+        t = await getPageText(d, idx);
+      } catch {
+        t = "";
+      }
+      textCache.set(idx, t);
+      return t;
+    };
     const errors: number[] = [];
     let done = 0;
     for (const p of toGenerate) {
@@ -225,12 +242,15 @@ function GenerateTab({
       const terms = termsByPage.get(p) ?? [];
       if (!terms.length) continue;
       try {
-        const text = await getPageText(doc, p);
+        const text = await pageTextOf(p);
         if (!text.trim()) {
           errors.push(p);
           continue;
         }
-        await generatePage({ bookId, pageIndex: p, pageText: text, markedTerms: terms, density, subjectHint: hint, regenerate: false });
+        // Neighbor pages are reference-only context (resolve content split across a page boundary).
+        const prevContext = (await pageTextOf(p - 1)).slice(-CONTEXT_CHARS);
+        const nextContext = (await pageTextOf(p + 1)).slice(0, CONTEXT_CHARS);
+        await generatePage({ bookId, pageIndex: p, pageText: text, markedTerms: terms, density, subjectHint: hint, regenerate: false, prevContext, nextContext });
         done++;
         onGenerated();
       } catch (e) {
