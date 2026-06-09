@@ -50,6 +50,14 @@ export const onRequestPut: Fn = async (ctx) => {
 export const onRequestGet: Fn = async (ctx) => {
   const uid = ctx.data.uid!;
   if (!ctx.env.PDFS) return json({ error: "r2_not_configured" }, 503);
+  // The owner may download their own ACTIVE book on ANY tier — so a downgraded Standard user can
+  // materialize the books they kept on the trim screen. retained/trimmed stay Pro-only (they're
+  // preserved purely for re-Pro restore). (PUT stays Pro-only.)
+  const row = await ctx.env.DB.prepare("SELECT status FROM books WHERE uid = ? AND book_id = ?")
+    .bind(uid, ctx.params.bookId)
+    .first<{ status: string }>();
+  if ((row?.status ?? "active") !== "active" && !isUnlimited(await getTier(ctx.env, uid, ctx.data.email)))
+    return json({ error: "pro_required" }, 403);
   const obj = await ctx.env.PDFS.get(r2key(uid, ctx.params.bookId));
   if (!obj) return json({ error: "not_found" }, 404);
   return new Response(obj.body, { headers: { "Content-Type": "application/pdf" } });

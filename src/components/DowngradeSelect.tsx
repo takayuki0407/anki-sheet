@@ -4,7 +4,9 @@
 // kept set authoritative; this device then deletes its local copies of the non-kept books. Other
 // devices follow on their next sync. Escape: back up first; or re-upgrade (DevTierSwitch / paywall).
 import { useCallback, useEffect, useState } from "react";
-import { listBooks, submitTrim, type AccountBook } from "../sync/api";
+import { listBooks, submitTrim, updateBookMeta, type AccountBook } from "../sync/api";
+import { downloadDeck } from "../sync/deck";
+import { deviceLabel } from "../sync/device";
 import { deleteDeck, listDecks } from "../db/repo";
 import { downloadBlob, exportBackup } from "../db/backup";
 import { DevTierSwitch } from "./DevTierSwitch";
@@ -60,7 +62,7 @@ export function DowngradeSelect({
     const warn = backedUp ? "" : "⚠ バックアップはまだ書き出していません。\n";
     if (
       !confirm(
-        `${warn}選んだ ${keep.size} 冊を残し、ほかの ${removeCount} 冊をアカウントから外します。各端末のローカルからも削除されます。この操作は元に戻せません。`,
+        `${warn}選んだ ${keep.size} 冊をこの端末に保存します。外した ${removeCount} 冊のうち、クラウド保存がある本はクラウドに退避し、Proに戻すと復元できます（保持〜約6ヶ月）。クラウド保存の無い本（端末のみ）は完全に削除されます。Standardは端末間同期がないため、他の端末のローカルコピーは次回起動時に削除されます。`,
       )
     )
       return;
@@ -68,10 +70,26 @@ export function DowngradeSelect({
     try {
       // Server makes the kept set authoritative (kept→active, others→retained/trimmed).
       await submitTrim([...keep]);
-      // Reconcile THIS device: delete local copies of books that weren't kept.
       const locals = await listDecks();
+      const localIds = new Set(locals.map((d) => d.bookId).filter(Boolean) as string[]);
+      // Reconcile THIS device: delete local copies of books that weren't kept.
       for (const d of locals) {
         if (d.id != null && d.bookId && !keep.has(d.bookId)) await deleteDeck(d.id);
+      }
+      // Materialize kept books that aren't on THIS device (now allowed on any tier for active books),
+      // then CLAIM the holder — but only AFTER a successful download, so a failure never leaves the
+      // book with no device. A failed/large/offline download stays active in the cloud section to
+      // retry ("ダウンロード待ち").
+      const me = deviceLabel();
+      for (const b of books) {
+        if (keep.has(b.book_id) && !localIds.has(b.book_id) && b.size > 0) {
+          try {
+            await downloadDeck(b);
+            await updateBookMeta(b.book_id, { device: me }).catch(() => {});
+          } catch {
+            /* leave it as cloud-only / download-pending; the bookshelf cloud section can retry */
+          }
+        }
       }
       onResolved();
     } catch (e) {
@@ -95,8 +113,9 @@ export function DowngradeSelect({
       <h2>残す本を選んでください</h2>
       <p className="muted">
         現在のプランの上限は {keepLimit} 冊です。アカウント全体（すべての端末）の本から、残す{" "}
-        {keepLimit} 冊を選んでください。選ばなかった本は各端末から削除されます（Proで取り込んだ本は
-        クラウドに保持され、再びProにすると復元できます）。
+        {keepLimit} 冊を選んでください。残した本はこの端末に保存されます。選ばなかった本のうち、
+        クラウド保存がある本はクラウドに退避し、Proに戻すと復元できます（保持〜約6ヶ月）。クラウド
+        保存の無い本（端末のみ）は完全に削除されます。
       </p>
       <p className="usage-line">
         <strong>

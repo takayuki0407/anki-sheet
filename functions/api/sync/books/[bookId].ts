@@ -10,7 +10,7 @@ import { json, type Fn } from "../../../_lib/types";
 export const onRequestPatch: Fn = async (ctx) => {
   const uid = ctx.data.uid!;
   const bookId = ctx.params.bookId;
-  let body: { favorite?: boolean; opened_at?: number; device?: string };
+  let body: { favorite?: boolean; opened_at?: number; device?: string | null };
   try {
     body = (await ctx.request.json()) as typeof body;
   } catch {
@@ -27,10 +27,14 @@ export const onRequestPatch: Fn = async (ctx) => {
     binds.push(body.opened_at);
   }
   // The device that currently HOLDS the book stamps its (user-editable) name here — on download and
-  // on rename — so the cloud list shows where a book is now, not just who first imported it.
+  // on rename — so the cloud list shows where a book is now, not just who first imported it. An
+  // explicit empty/null device CLEARS the holder (the holder deleted its local copy → the book is
+  // now cloud-only, held by no device).
   if (typeof body.device === "string" && body.device.trim()) {
     sets.push("device = ?");
     binds.push(body.device.trim());
+  } else if (body.device === "" || body.device === null) {
+    sets.push("device = NULL");
   }
   if (!sets.length) return json({ ok: true });
   binds.push(uid, bookId);

@@ -142,6 +142,11 @@ export function DeckList() {
         const active = new Set(
           u.books.filter((b) => (b.status ?? "active") === "active").map((b) => b.book_id),
         );
+        // Single-home: on a NON-sync tier (Standard/Free) a book lives on exactly ONE device — the
+        // one that trimmed/materialized it (the holder, `device`). Other devices drop their local
+        // copy. Pro+ (sync) keeps multi-device copies, so this only runs for non-sync tiers.
+        const me = deviceLabel();
+        const singleHome = !u.unlimited;
         // Reconcile favorite / latest-opened against a fresh read of the local decks (not the live
         // query) so a later optimistic toggle isn't clobbered. Server is authoritative for favorite.
         for (const local of locals) {
@@ -153,6 +158,11 @@ export function DeckList() {
           }
           const b = u.books.find((x) => x.book_id === local.bookId);
           if (!b) continue;
+          if (singleHome && b.device && b.device !== me) {
+            await deleteDeck(local.id); // held by another device → single-home drop
+            void deleteBookQuestions(local.bookId).catch(() => {});
+            continue;
+          }
           const patch: { favorite?: boolean; openedAt?: number } = {};
           if (!!local.favorite !== !!b.favorite) patch.favorite = !!b.favorite;
           if ((b.opened_at ?? 0) > (local.openedAt ?? 0)) patch.openedAt = b.opened_at;
@@ -255,6 +265,9 @@ export function DeckList() {
                 cloudBacked={
                   cloudLoaded ? (v.deck.bookId ? cloudBlobIds.has(v.deck.bookId) : false) : null
                 }
+                cloudDevice={
+                  (v.deck.bookId && cloud?.find((b) => b.book_id === v.deck.bookId)?.device) || null
+                }
               />
             ))}
           </div>
@@ -335,7 +348,9 @@ function CloudBook({
   return (
     <li className="cloud-item">
       <span className="cloud-name">{book.name || "（無題）"}</span>
-      <span className="cloud-device">{hasBlob ? (book.device ?? "") : "クラウド保存なし"}</span>
+      <span className="cloud-device">
+        {hasBlob ? book.device || "クラウドのみ" : "クラウド保存なし"}
+      </span>
       {hasBlob && canDownload && (
         <button className="btn sm" onClick={download} disabled={busy}>
           {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
@@ -354,6 +369,7 @@ function DeckBook({
   count,
   freeSlotOnDelete,
   cloudBacked,
+  cloudDevice,
 }: {
   deck: DeckRow;
   count: number;
@@ -361,6 +377,8 @@ function DeckBook({
   /** true = the account has a cloud copy (size>0, restorable on re-Pro); false = device-only
    * (delete = permanent); null = unknown (offline / not yet fetched → warn on the safe side). */
   cloudBacked: boolean | null;
+  /** The account book's current holder name, or null (no holder / unknown). */
+  cloudDevice: string | null;
 }) {
   const setView = useApp((s) => s.setView);
   const cover = useCover(deck.id!);
@@ -388,7 +406,13 @@ function DeckBook({
     await deleteDeck(deck.id!);
     if (deck.bookId) {
       void deleteBookQuestions(deck.bookId).catch(() => {}); // drop this device's AI questions
-      if (freeSlotOnDelete) void unregisterBook(deck.bookId).catch(() => {});
+      if (freeSlotOnDelete) {
+        void unregisterBook(deck.bookId).catch(() => {});
+      } else if (cloudBacked === true && cloudDevice === deviceLabel()) {
+        // We were the holder of this cloud-backed book; releasing it → no device holds it now (the
+        // book becomes "cloud-only"). Clear the holder so the bookshelf stops showing this device.
+        void updateBookMeta(deck.bookId, { device: null }).catch(() => {});
+      }
     }
   };
   const toggleFav = (e: React.MouseEvent) => {
