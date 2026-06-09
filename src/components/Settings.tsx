@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { firstAnswerPage, getDeck, getDeckPdf, redetectDeck, updateDeck } from "../db/repo";
-import { detectClozesInPdf, detectSinglePage, loadPdf } from "../pdf/pdfEngine";
+import {
+  autoDetectColorConfig,
+  detectClozesInPdf,
+  detectSinglePage,
+  loadPdf,
+} from "../pdf/pdfEngine";
 import { PageOverlay } from "../render/PageOverlay";
 import { useApp } from "../store/session";
 import {
@@ -34,6 +39,7 @@ export function Settings({ deckId }: { deckId: number }) {
   const [previewPage, setPreviewPage] = useState(0);
   const [highlights, setHighlights] = useState<Rect[]>([]);
   const [redetect, setRedetect] = useState<Redetect>({ k: "idle" });
+  const [autoBusy, setAutoBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +105,21 @@ export function Settings({ deckId }: { deckId: number }) {
     setView({ name: "decks" });
   };
 
+  // Auto-detect the answer color (same probe the import wizard uses), then update the live preview.
+  // The manual sliders/presets stay available to fine-tune afterward.
+  const runAutoColor = async () => {
+    if (!pdf) return;
+    setAutoBusy(true);
+    setErrMsg("");
+    try {
+      setColor(await autoDetectColorConfig(pdf.blob));
+    } catch (e) {
+      setErrMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAutoBusy(false);
+    }
+  };
+
   const runRedetect = async () => {
     if (!pdf) return;
     if (
@@ -159,6 +180,9 @@ export function Settings({ deckId }: { deckId: number }) {
 
       <h3 className="section">色の検出（プレビュー）</h3>
       <div className="preset-row">
+        <button className="btn sm primary" onClick={runAutoColor} disabled={autoBusy}>
+          {autoBusy ? "自動検出中…" : "自動検出"}
+        </button>
         {COLOR_PRESETS.map((p) => (
           <button
             key={p.key}

@@ -6,7 +6,7 @@
 // safe even in production: no other account can change a tier. The chosen tier is stored in
 // users.tier and honored by getTier (an explicit row wins, even for the admin — see _lib/tier.ts).
 import { json, type Fn } from "../../../_lib/types";
-import { limitFor, type Tier } from "../../../_lib/tier";
+import { isUnlimited, limitFor, reactivateRetained, type Tier } from "../../../_lib/tier";
 
 export const onRequestPost: Fn = async (ctx) => {
   const email = ctx.data.email;
@@ -56,6 +56,9 @@ export const onRequestPost: Fn = async (ctx) => {
   )
     .bind(ctx.data.uid, tier, now, downgradedAt, needsTrim ? 1 : 0, cap)
     .run();
+
+  // Mirror the webhook: switching (back) to a cloud-bearing tier reactivates preserved books.
+  if (isUnlimited(tier)) await reactivateRetained(ctx.env, ctx.data.uid!);
 
   return json({ ok: true, tier, downgradedAt, trimRequired: needsTrim, cap });
 };

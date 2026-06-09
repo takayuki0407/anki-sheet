@@ -62,6 +62,15 @@ export async function getTrialUntil(env: Env, uid: string): Promise<number> {
   return Number(row?.trial_until) || 0;
 }
 
+/** Re-Pro restore: bring books that were preserved (status='retained') on a downgrade back to
+ * 'active' when the account returns to a cloud-bearing tier (pro/premium/admin). trimmed books
+ * (R2 already cleared) are NOT restorable, so they're left as-is. */
+export async function reactivateRetained(env: Env, uid: string): Promise<void> {
+  await env.DB.prepare("UPDATE books SET status = 'active' WHERE uid = ? AND status = 'retained'")
+    .bind(uid)
+    .run();
+}
+
 /** tier + trial in ONE read of the users row (the AI generate path needs both). */
 export async function getTierAndTrial(
   env: Env,

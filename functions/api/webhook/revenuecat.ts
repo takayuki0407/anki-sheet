@@ -4,7 +4,7 @@
 // uses the EVENT timestamp (idempotent against out-of-order/duplicate delivery), and sets a downgrade
 // trim flag when the new cap is below the account's active book count.
 import { json, type Fn } from "../../_lib/types";
-import { isUnlimited, limitFor, type Tier } from "../../_lib/tier";
+import { isUnlimited, limitFor, reactivateRetained, type Tier } from "../../_lib/tier";
 
 // Events that grant/maintain access vs. revoke it. CANCELLATION / BILLING_ISSUE keep current access
 // (the user keeps their tier until it actually EXPIRES → Free floor).
@@ -93,5 +93,8 @@ export const onRequestPost: Fn = async (ctx) => {
   )
     .bind(uid, tier, eventTime, downgradedAt, needsTrim ? 1 : 0, newCap, trialUntil, cloud ? 1 : 0)
     .run();
+  // Re-Pro restore: returning to a cloud-bearing tier reactivates books preserved on a prior
+  // downgrade (status='retained' → 'active'), so they reappear in the bookshelf's cloud section.
+  if (cloud) await reactivateRetained(ctx.env, uid);
   return json({ ok: true });
 };
