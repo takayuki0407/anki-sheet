@@ -27,6 +27,14 @@ const groups = [
     files: [join(webRoot, "src/sync/cardKeys.ts"), join(iosRoot, "src/sync/cardKeys.ts")],
   },
   {
+    name: "contentMerge.ts (mask/cloze LWW — backend / web / iOS)",
+    files: [
+      join(webRoot, "functions/_lib/contentMerge.ts"),
+      join(webRoot, "src/sync/contentMerge.ts"),
+      join(iosRoot, "src/sync/contentMerge.ts"),
+    ],
+  },
+  {
     name: "detect/* (pure color-detection engine — web ↔ iOS engine-src)",
     files: ["colorBand.ts", "detectPage.ts", "heightFilter.ts", "pixelSampler.ts", "runGeometry.ts"]
       .flatMap((f) => [

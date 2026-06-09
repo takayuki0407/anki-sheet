@@ -26,6 +26,7 @@ export interface R2Object {
 }
 export interface R2ObjectBody extends R2Object {
   body: ReadableStream;
+  text(): Promise<string>;
 }
 export interface R2Objects {
   objects: R2Object[];
