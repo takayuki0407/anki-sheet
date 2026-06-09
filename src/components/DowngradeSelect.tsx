@@ -1,14 +1,13 @@
-// 強制トリム — shown (forced, by App's over-limit Gate) when a non-Pro account holds MORE local
-// books than the per-device limit. This happens after a future Pro→Standard downgrade, or as a
-// leftover over-limit state. The user picks which books to KEEP on this device; the rest are
-// deleted LOCALLY. The cloud copy (Pro-uploaded) is preserved so re-upgrading to Pro can restore
-// them (purged after 6 months by the retention job). Escape: back up first. No web paywall yet,
-// so "keep everything" means staying on Pro (handled on iOS for now).
+// 強制トリム — shown (forced, by App's gate) when the server flags `trim_required` after a downgrade
+// left the account over its book cap. The list is the ACCOUNT-WIDE book set (all devices), so the
+// user can pick the global kept set even for books not on this device. POST /api/sync/trim makes the
+// kept set authoritative; this device then deletes its local copies of the non-kept books. Other
+// devices follow on their next sync. Escape: back up first; or re-upgrade (DevTierSwitch / paywall).
 import { useCallback, useEffect, useState } from "react";
-import { deleteDeck, getCover, listDecks } from "../db/repo";
+import { listBooks, submitTrim, type AccountBook } from "../sync/api";
+import { deleteDeck, listDecks } from "../db/repo";
 import { downloadBlob, exportBackup } from "../db/backup";
 import { DevTierSwitch } from "./DevTierSwitch";
-import type { DeckRow } from "../types";
 
 function dateStamp(): string {
   const d = new Date();
@@ -16,45 +15,32 @@ function dateStamp(): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
 }
 
-/** Show the cached cover if one exists. We do NOT generate covers here (no heavy PDF parse on a
- * forced screen) — a book with no cached cover falls back to its name. */
-function useCachedCover(deckId: number): string | null {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    let objectUrl: string | null = null;
-    void getCover(deckId).then((c) => {
-      if (cancelled || !c) return;
-      objectUrl = URL.createObjectURL(c.blob);
-      setUrl(objectUrl);
-    });
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [deckId]);
-  return url;
-}
-
-export function DowngradeSelect({ keepLimit }: { keepLimit: number }) {
-  const [decks, setDecks] = useState<DeckRow[] | null>(null);
-  const [keep, setKeep] = useState<Set<number>>(new Set());
+export function DowngradeSelect({
+  keepLimit,
+  onResolved,
+}: {
+  keepLimit: number;
+  onResolved: () => void;
+}) {
+  const [books, setBooks] = useState<AccountBook[] | null>(null);
+  const [keep, setKeep] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [backedUp, setBackedUp] = useState(false);
 
   useEffect(() => {
-    void listDecks().then(setDecks);
+    void listBooks()
+      .then((u) => setBooks(u.books))
+      .catch(() => setBooks([]));
   }, []);
 
   const toggle = useCallback(
-    (id: number) => {
+    (id: string) =>
       setKeep((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
-        else if (next.size < keepLimit) next.add(id); // can't select more than we're allowed to keep
+        else if (next.size < keepLimit) next.add(id); // can't keep more than the plan allows
         return next;
-      });
-    },
+      }),
     [keepLimit],
   );
 
@@ -69,47 +55,48 @@ export function DowngradeSelect({ keepLimit }: { keepLimit: number }) {
   }, []);
 
   const apply = useCallback(async () => {
-    if (!decks) return;
-    const remove = decks.filter((d) => !keep.has(d.id!));
+    if (!books) return;
+    const removeCount = books.length - keep.size;
     const warn = backedUp ? "" : "⚠ バックアップはまだ書き出していません。\n";
     if (
       !confirm(
-        `${warn}選んだ ${keep.size} 冊を残し、ほかの ${remove.length} 冊をこの端末から削除します。この操作は元に戻せません。`,
+        `${warn}選んだ ${keep.size} 冊を残し、ほかの ${removeCount} 冊をアカウントから外します。各端末のローカルからも削除されます。この操作は元に戻せません。`,
       )
     )
       return;
+    setBusy(true);
     try {
-      setBusy(true);
-      // Delete the non-kept books from THIS device only. The cloud copy (Pro) is KEPT (NOT
-      // unregistered) so re-upgrading to Pro can restore it. Per-device limit, so the account/cloud
-      // registry is intentionally not trimmed here. App's live deck count clears the gate once we're
-      // at/under the limit.
-      for (const d of remove) await deleteDeck(d.id!);
+      // Server makes the kept set authoritative (kept→active, others→retained/trimmed).
+      await submitTrim([...keep]);
+      // Reconcile THIS device: delete local copies of books that weren't kept.
+      const locals = await listDecks();
+      for (const d of locals) {
+        if (d.id != null && d.bookId && !keep.has(d.bookId)) await deleteDeck(d.id);
+      }
+      onResolved();
     } catch (e) {
-      alert("削除に失敗しました: " + (e instanceof Error ? e.message : String(e)));
-    } finally {
+      alert("処理に失敗しました: " + (e instanceof Error ? e.message : String(e)));
       setBusy(false);
     }
-  }, [decks, keep, backedUp]);
+  }, [books, keep, backedUp, onResolved]);
 
-  if (!decks)
+  if (!books)
     return (
       <div className="panel">
         <p className="muted">読み込み中…</p>
       </div>
     );
 
-  const target = Math.min(keepLimit, decks.length);
+  const target = Math.min(keepLimit, books.length);
   const canApply = keep.size === target && !busy;
 
   return (
     <div className="panel downgrade">
       <h2>残す本を選んでください</h2>
       <p className="muted">
-        現在のプラン（Standard）では、この端末に本を {keepLimit} 冊まで保存できます。いまこの端末には{" "}
-        {decks.length} 冊あります。残す本を {keepLimit} 冊選んでください。選ばなかった本はこの端末から
-        削除されます（Proで取り込んだ本はクラウドに保持され、再びProにすると復元できます）。すべて残したい
-        場合は Pro（無制限）をご利用ください。
+        現在のプランの上限は {keepLimit} 冊です。アカウント全体（すべての端末）の本から、残す{" "}
+        {keepLimit} 冊を選んでください。選ばなかった本は各端末から削除されます（Proで取り込んだ本は
+        クラウドに保持され、再びProにすると復元できます）。
       </p>
       <p className="usage-line">
         <strong>
@@ -117,51 +104,31 @@ export function DowngradeSelect({ keepLimit }: { keepLimit: number }) {
         </strong>
       </p>
 
-      <div className="book-grid">
-        {decks.map((d) => (
-          <TrimBook key={d.id} deck={d} selected={keep.has(d.id!)} onToggle={() => toggle(d.id!)} />
+      <ul className="trim-list">
+        {books.map((b) => (
+          <li key={b.book_id}>
+            <button
+              className={`trim-row${keep.has(b.book_id) ? " sel" : ""}`}
+              onClick={() => toggle(b.book_id)}
+            >
+              <span className="trim-check">{keep.has(b.book_id) ? "✓" : ""}</span>
+              <span className="trim-name">{b.name || "（無題）"}</span>
+              <span className="trim-device muted small">{b.device ?? ""}</span>
+            </button>
+          </li>
         ))}
-      </div>
+      </ul>
 
       <div className="tools-row downgrade-actions">
         <button className="btn ghost sm" onClick={backup} disabled={busy}>
           {backedUp ? "✓ バックアップ済み" : "バックアップを書き出す"}
         </button>
         <button className="btn primary" onClick={apply} disabled={!canApply}>
-          {busy ? "削除中…" : `選んだ ${target} 冊を残して削除`}
+          {busy ? "処理中…" : `選んだ ${target} 冊を残す`}
         </button>
       </div>
 
-      {/* Admin escape hatch: switch back to Pro (unlimited) to leave this forced screen without
-          deleting anything — only visible to the developer account. */}
       <DevTierSwitch />
     </div>
-  );
-}
-
-function TrimBook({
-  deck,
-  selected,
-  onToggle,
-}: {
-  deck: DeckRow;
-  selected: boolean;
-  onToggle: () => void;
-}) {
-  const cover = useCachedCover(deck.id!);
-  return (
-    <button className={`trim-book${selected ? " sel" : ""}`} onClick={onToggle}>
-      <div className="book-cover">
-        {cover ? (
-          <img src={cover} alt={deck.name} loading="lazy" />
-        ) : (
-          <span className="cover-fallback">{deck.name}</span>
-        )}
-      </div>
-      <div className="book-title" title={deck.name}>
-        {deck.name}
-      </div>
-      {selected && <span className="trim-badge">✓</span>}
-    </button>
   );
 }

@@ -47,12 +47,19 @@ export async function registerBook(
     method: "POST",
     body: JSON.stringify({ book_id: bookId, name, page_count: pageCount, device: deviceLabel() }),
   });
-  if (res.status === 403) {
+  if (res.status === 402) {
+    // Account-wide cap reached (the slot was NOT reserved).
     const b = (await res.json().catch(() => ({}))) as { count?: number; limit?: number };
     return { ok: false, limitReached: true, count: b.count, limit: b.limit };
   }
   if (!res.ok) throw new Error(`register failed: ${res.status}`);
   return { ok: true };
+}
+
+/** Resolve a downgrade trim: keep these book ids (server makes the kept set authoritative). */
+export async function submitTrim(keep: string[]): Promise<void> {
+  const res = await authedFetch("/trim", { method: "POST", body: JSON.stringify({ keep }) });
+  if (!res.ok) throw new Error(`trim failed: ${res.status}`);
 }
 
 /** Free an account-global slot (idempotent; 404 is fine). */
@@ -86,18 +93,27 @@ export interface AccountBook {
   page_count: number;
   device: string | null;
   updated_at: number;
+  /** active | retained | trimmed | pending. Only `active` books count toward the cap + are usable. */
+  status?: string;
   /** Pinned to the top of the bookshelf when 1 (synced across the account's devices). */
   favorite: number;
   /** Last-opened time (epoch ms) — drives 最近開いた順; server keeps the MAX across devices. */
   opened_at: number;
 }
 
+export type Tier = "free" | "standard" | "pro" | "premium" | "admin";
+
 export interface AccountBooks {
   books: AccountBook[];
+  /** Count of ACTIVE books (the cap-relevant, account-wide count). */
   count: number;
   limit: number;
-  tier: "standard" | "pro" | "admin";
+  tier: Tier;
   unlimited: boolean;
+  /** Set after a downgrade leaves the account over its cap — the client forces the trim screen. */
+  trimRequired?: boolean;
+  /** The kept-set target (book cap) after a downgrade. */
+  cap?: number;
 }
 
 /** List the account's books (across all devices) with the current count + cap + tier. */
@@ -110,10 +126,7 @@ export async function listBooks(): Promise<AccountBooks> {
 /** Admin-only TEST helper: set the signed-in account's own tier (and optionally backdate
  * downgraded_at to exercise the 6-month retention job). Throws 403 unless the account is the admin
  * (enforced server-side against the verified token). Used by the developer dev-tools UI. */
-export async function setDevTier(
-  tier: "standard" | "pro" | "admin",
-  downgradedAt?: number | null,
-): Promise<void> {
+export async function setDevTier(tier: Tier, downgradedAt?: number | null): Promise<void> {
   const body: { tier: string; downgradedAt?: number | null } = { tier };
   if (downgradedAt !== undefined) body.downgradedAt = downgradedAt;
   const res = await authedFetch("/dev/tier", { method: "POST", body: JSON.stringify(body) });

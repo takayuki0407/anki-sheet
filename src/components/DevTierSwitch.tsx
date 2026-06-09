@@ -17,7 +17,10 @@ export function DevTierSwitch() {
   const [busy, setBusy] = useState(false);
   if (user?.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) return null;
 
-  const apply = async (tier: "standard" | "pro" | "admin", downgradedAt?: number | null) => {
+  const apply = async (
+    tier: "free" | "standard" | "pro" | "premium" | "admin",
+    downgradedAt?: number | null,
+  ) => {
     if (busy) return;
     setBusy(true);
     try {
@@ -35,14 +38,20 @@ export function DevTierSwitch() {
     <div className="dev-panel">
       <p className="dev-title">🛠 開発者ツール（管理者のみ）— プラン切替（テスト用）</p>
       <div className="dev-row">
+        <button className="btn sm" disabled={busy} onClick={() => void apply("free")}>
+          Free
+        </button>
         <button className="btn sm" disabled={busy} onClick={() => void apply("standard")}>
           Standard
         </button>
         <button className="btn sm" disabled={busy} onClick={() => void apply("pro")}>
           Pro
         </button>
+        <button className="btn sm" disabled={busy} onClick={() => void apply("premium")}>
+          Premium
+        </button>
         <button className="btn sm" disabled={busy} onClick={() => void apply("admin")}>
-          管理者（無制限）に戻す
+          管理者に戻す
         </button>
       </div>
       <button

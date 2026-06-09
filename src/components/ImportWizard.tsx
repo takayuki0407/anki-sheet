@@ -8,7 +8,7 @@ import {
   type PdfDetectionResult,
 } from "../pdf/pdfEngine";
 import { PageOverlay } from "../render/PageOverlay";
-import { importBookmarks, importDeck, listDecks } from "../db/repo";
+import { importBookmarks, importDeck } from "../db/repo";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
 import { listBooks, registerBook } from "../sync/api";
@@ -111,21 +111,22 @@ export function ImportWizard() {
       });
       return;
     }
-    // Per-device limit: block importing past the tier's per-device allowance (Standard = 10 books on
-    // THIS device). The account registry no longer caps globally, so each device enforces its OWN
-    // local count. Fail OPEN on any error (offline / signed-out) so local-first import never breaks.
+    // Account-wide cap: block importing past the tier's allowance ACROSS THE WHOLE ACCOUNT (Free 1 /
+    // Standard 10 / Pro+ unlimited). The server is the source of truth; this is the early UX gate and
+    // the server re-checks atomically on register (402). Fail OPEN if the count is unreachable —
+    // offline imports are still re-checked on register.
     try {
-      const [acct, decks] = await Promise.all([listBooks(), listDecks()]);
-      if (!acct.unlimited && decks.length >= acct.limit) {
+      const acct = await listBooks();
+      if (!acct.unlimited && acct.count >= acct.limit) {
         setPhase({
           k: "error",
-          message: `この端末では本は ${acct.limit} 冊までです。不要な本を削除するか、Pro（無制限）にアップグレードしてください。`,
-          detail: `tier: ${acct.tier}, local decks: ${decks.length} / ${acct.limit}`,
+          message: `本はプランの上限（${acct.limit} 冊）に達しています。不要な本を削除するか、上位プランにアップグレードしてください。`,
+          detail: `tier: ${acct.tier}, account books: ${acct.count} / ${acct.limit}`,
         });
         return;
       }
     } catch {
-      /* fail open — keep local-first import working when the registry is unreachable */
+      /* fail open — keep local-first import working when the account is unreachable */
     }
     setName(file.name.replace(/\.pdf$/i, ""));
     setPhase({ k: "configuring", blob: file.slice(0, file.size, "application/pdf") });
@@ -210,18 +211,24 @@ export function ImportWizard() {
     };
     setPhase({ k: "saving" });
     try {
-      // Reserve an account-global slot FIRST when signed in. limit_reached -> the over-limit
-      // chooser (pick a book to delete, or upgrade). Offline / signed-out / network errors fail
-      // OPEN (import locally) so the local-first experience never breaks.
+      // Reserve an account-wide slot FIRST when signed in. The server enforces the cap atomically;
+      // 402 (limit_reached) → block the import with an upgrade/trim message (the book is NOT kept).
+      // Offline / signed-out / network errors fail OPEN (import locally) so the local-first
+      // experience never breaks; the server re-checks on the next sync.
       if (useAuth.getState().user) {
+        let r;
         try {
-          const r = await registerBook(pending.bookId, pending.deckName, result.pageCount);
-          if (!r.ok && r.limitReached) {
-            setPhase({ k: "overlimit", pending: { ...pending, limit: r.limit ?? 10 } });
-            return;
-          }
+          r = await registerBook(pending.bookId, pending.deckName, result.pageCount);
         } catch {
-          /* fail open — keep the book locally; the registry reconciles later */
+          r = { ok: true }; // network/registry unreachable → fail open
+        }
+        if (!r.ok && r.limitReached) {
+          setPhase({
+            k: "error",
+            message: `本はプランの上限（${r.limit ?? ""} 冊）に達しています。不要な本を削除するか、上位プランにアップグレードしてください。`,
+            detail: `account books: ${r.count ?? "?"} / ${r.limit ?? "?"}`,
+          });
+          return;
         }
       }
       await finishImport(pending);

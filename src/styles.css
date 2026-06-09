@@ -1914,3 +1914,20 @@ body {
 .solve-explain { line-height: 1.6; }
 .solve-done { text-align: center; display: flex; flex-direction: column; gap: 12px; padding: 24px; }
 .solve-done-actions { display: flex; gap: 12px; justify-content: center; }
+
+/* ---- Forced-trim list (account-wide kept-set picker) ---- */
+.trim-list { list-style: none; padding: 0; margin: 14px 0; display: flex; flex-direction: column; gap: 6px; }
+.trim-row {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); color: var(--ink); font: inherit; cursor: pointer; text-align: left;
+}
+.trim-row.sel { border-color: var(--sand); background: rgba(212, 163, 115, 0.12); }
+.trim-check {
+  width: 22px; height: 22px; flex: 0 0 auto; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card); border: 1px solid var(--line); color: #fff; font-weight: 800;
+}
+.trim-row.sel .trim-check { background: var(--sand); border-color: var(--sand); }
+.trim-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trim-device { flex: 0 0 auto; }

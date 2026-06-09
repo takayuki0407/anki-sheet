@@ -133,14 +133,26 @@ export function DeckList() {
       .then(async (u) => {
         if (!live) return;
         setCloud(u.books);
-        setCloudPro(u.tier === "pro" || u.tier === "admin"); // cloud download/restore is Pro-only
-        // Reconcile favorite / latest-opened set on other devices ONCE per fetch, against a fresh
-        // read of the local decks (not the live query) so a later optimistic toggle isn't clobbered
-        // by a stale snapshot. Server is authoritative for favorite; opened_at takes the most recent.
+        setCloudPro(u.unlimited); // cloud download/restore is Pro+ (incl. Premium / admin)
         const locals = await listDecks();
-        for (const b of u.books) {
-          const local = locals.find((d) => d.bookId === b.book_id);
-          if (!local?.id) continue;
+        // Account-wide trim follow: the server marks trimmed/retained books non-active. Delete this
+        // device's local copies of books the account no longer holds as active. (Books unknown to the
+        // server — a fresh local import not yet registered — are left alone.)
+        const known = new Set(u.books.map((b) => b.book_id));
+        const active = new Set(
+          u.books.filter((b) => (b.status ?? "active") === "active").map((b) => b.book_id),
+        );
+        // Reconcile favorite / latest-opened against a fresh read of the local decks (not the live
+        // query) so a later optimistic toggle isn't clobbered. Server is authoritative for favorite.
+        for (const local of locals) {
+          if (local.id == null || !local.bookId) continue;
+          if (known.has(local.bookId) && !active.has(local.bookId)) {
+            await deleteDeck(local.id); // trimmed on the account → follow
+            void deleteBookQuestions(local.bookId).catch(() => {});
+            continue;
+          }
+          const b = u.books.find((x) => x.book_id === local.bookId);
+          if (!b) continue;
           const patch: { favorite?: boolean; openedAt?: number } = {};
           if (!!local.favorite !== !!b.favorite) patch.favorite = !!b.favorite;
           if ((b.opened_at ?? 0) > (local.openedAt ?? 0)) patch.openedAt = b.opened_at;
@@ -157,7 +169,10 @@ export function DeckList() {
   }, [user]);
 
   const localIds = new Set(((decks ?? []).map((d) => d.bookId).filter(Boolean) as string[]));
-  const remote = (cloud ?? []).filter((b) => !localIds.has(b.book_id));
+  // Cloud section = ACTIVE account books not on this device (retained/trimmed books aren't offered).
+  const remote = (cloud ?? []).filter(
+    (b) => !localIds.has(b.book_id) && (b.status ?? "active") === "active",
+  );
 
   const onExport = async () => {
     const blob = await exportBackup();
