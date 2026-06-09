@@ -23,6 +23,10 @@ const groups = [
     ],
   },
   {
+    name: "cardKeys.ts (★/revealed position keys — web ↔ iOS)",
+    files: [join(webRoot, "src/sync/cardKeys.ts"), join(iosRoot, "src/sync/cardKeys.ts")],
+  },
+  {
     name: "detect/* (pure color-detection engine — web ↔ iOS engine-src)",
     files: ["colorBand.ts", "detectPage.ts", "heightFilter.ts", "pixelSampler.ts", "runGeometry.ts"]
       .flatMap((f) => [

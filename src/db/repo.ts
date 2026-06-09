@@ -11,6 +11,8 @@ import type {
   QuestionRow,
   Rect,
 } from "../types";
+import { cardKey, correspondCards } from "../sync/cardKeys";
+import { setActiveStars, type StarMap } from "../sync/progressMerge";
 
 export interface ImportParams {
   name: string;
@@ -109,7 +111,9 @@ export async function updateDeck(deckId: number, patch: Partial<DeckRow>): Promi
   await db.decks.update(deckId, patch);
 }
 
-/** Re-run detection for a deck under a new color config: replace all its answers. */
+/** Re-run detection for a deck under a new color config: replace all its answers. Re-detection makes
+ * NEW card ids (and may change which/where answers are), so ★・revealed (stored as local card ids)
+ * are carried over to the replaced cards by geometric overlap; unmatched answers are dropped (§4.4). */
 export async function redetectDeck(
   deckId: number,
   color: DeckColorConfig,
@@ -117,14 +121,44 @@ export async function redetectDeck(
 ): Promise<number> {
   const now = Date.now();
   return db.transaction("rw", db.decks, db.pdfs, db.cards, async () => {
-    await db.decks.update(deckId, { color });
     const pdf = await db.pdfs.where("deckId").equals(deckId).first();
     if (!pdf?.id) throw new Error("PDFが見つかりません");
+    const deck = await db.decks.get(deckId);
+    const oldCards = await db.cards.where("deckId").equals(deckId).toArray(); // snapshot for carry-over
     await db.cards.where("deckId").equals(deckId).delete();
     const cards = clozesToCards(clozes, deckId, pdf.id, now);
+    const newIds: number[] = [];
     for (let i = 0; i < cards.length; i += 500) {
-      await db.cards.bulkAdd(cards.slice(i, i + 500));
+      const keys = await db.cards.bulkAdd(cards.slice(i, i + 500), { allKeys: true });
+      newIds.push(...(keys as number[]));
     }
+    const newCards = cards.map((c, i) => ({
+      id: newIds[i],
+      pageIndex: c.pageIndex,
+      answerRect: c.answerRect,
+    }));
+    // Carry ★/revealed (local ids) over to the new cards by overlap; drop answers that vanished.
+    const corr = correspondCards(oldCards, newCards);
+    const remap = (ids?: number[]) =>
+      (ids ?? []).map((id) => corr.get(id)).filter((x): x is number => x != null);
+    const newStarred = remap(deck?.starred);
+    const newRevealed = remap(deck?.revealed);
+    // Re-anchor the ★ LWW map to the carried-over stars' position keys. No-op when the detection is
+    // unchanged; when answers moved, the stale (old-position) keys are tombstoned — inert, since no
+    // card sits at the old position — and the surviving stars take their new keys.
+    const byId = new Map(newCards.map((c) => [c.id, c] as const));
+    const starMap: StarMap = { ...(deck?.starsLww ?? {}) };
+    setActiveStars(
+      starMap,
+      newStarred.map((id) => cardKey(byId.get(id)!.pageIndex, byId.get(id)!.answerRect)),
+      now,
+    );
+    await db.decks.update(deckId, {
+      color,
+      starred: newStarred,
+      revealed: newRevealed,
+      starsLww: starMap,
+    });
     return cards.length;
   });
 }

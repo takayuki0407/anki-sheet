@@ -32,6 +32,7 @@ import {
   addBm,
 } from "../sync/progressMerge";
 import { refreshContent, uploadContent } from "../sync/deck";
+import { cardKeyMaps as cardKeyMapsFlat } from "../sync/cardKeys";
 import type { BookmarkRow, CardRow, PdfRow, Rect } from "../types";
 
 type Status = "loading" | "ready" | "error";
@@ -114,24 +115,10 @@ function RedSheet({
 }
 
 /** Standalone digital red sheet: page through (or scroll) a PDF, hide/show answers. */
-/** Device-portable reveal keys: a card's "pageIndex:ordinal", where ordinal is its index among
- *  the page's cards sorted by position (y,x) — identical across devices for the same detected
- *  book, so revealed answers map correctly despite local card ids differing per device. */
+// Device-portable ★/revealed keys come from sync/cardKeys (page + quantized answer position, stable
+// across answer add/remove and re-detect). This thin wrapper adapts the viewer's page-grouped map.
 function cardKeyMaps(cardsByPage: Map<number, CardRow[]>) {
-  const idToKey = new Map<number, string>();
-  const keyToId = new Map<string, number>();
-  for (const [page, cards] of cardsByPage) {
-    [...cards]
-      .sort((a, b) => a.answerRect.y - b.answerRect.y || a.answerRect.x - b.answerRect.x)
-      .forEach((c, i) => {
-        if (c.id != null) {
-          const key = `${page}:${i}`;
-          idToKey.set(c.id, key);
-          keyToId.set(key, c.id);
-        }
-      });
-  }
-  return { idToKey, keyToId };
+  return cardKeyMapsFlat([...cardsByPage.values()].flat());
 }
 
 export function PageViewer({ deckId }: { deckId: number }) {
@@ -244,7 +231,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
         const seedAt = Date.now();
         let starMap: StarMap = d.starsLww ?? {};
         let bmMap: BmMap = d.bmLww ?? {};
-        if (!d.starsLww || !d.bmLww) {
+        // The ★ key scheme changed from ordinal to position (§4.4); an old map has 2-part keys
+        // ("5:1") that won't resolve. Treat such a map as legacy and rebuild it from the reliable
+        // local id set (d.starred) so existing ★ survive the upgrade instead of being cleared.
+        const starLegacy = Object.keys(starMap).some((k) => k.split(":").length < 3);
+        if (!d.starsLww || starLegacy || !d.bmLww) {
           const byPage = new Map<number, CardRow[]>();
           for (const c of await deckCards(deckId)) {
             const arr = byPage.get(c.pageIndex) ?? [];
@@ -252,12 +243,14 @@ export function PageViewer({ deckId }: { deckId: number }) {
             byPage.set(c.pageIndex, arr);
           }
           const { idToKey } = cardKeyMaps(byPage);
-          if (!d.starsLww && d.starred?.length)
+          if (!d.starsLww || starLegacy) {
+            starMap = {};
             setActiveStars(
               starMap,
-              d.starred.map((i) => idToKey.get(i)).filter((x): x is string => !!x),
+              (d.starred ?? []).map((i) => idToKey.get(i)).filter((x): x is string => !!x),
               seedAt,
             );
+          }
           if (!d.bmLww)
             for (const b of await listBookmarks(deckId)) addBm(bmMap, b.title, b.pageIndex, seedAt);
         }
@@ -337,6 +330,12 @@ export function PageViewer({ deckId }: { deckId: number }) {
     if (!pendingRevealKeys || !allCards || allCards.length === 0) return;
     const { keyToId } = cardKeyMaps(cardsByPage);
     const ids = pendingRevealKeys.map((k) => keyToId.get(k)).filter((x): x is number => x != null);
+    // Don't let a non-empty but fully-unresolvable cloud set (e.g. legacy ordinal keys after the §4.4
+    // key change) wipe local reveals — keep what's local and let the next push re-key it.
+    if (pendingRevealKeys.length > 0 && ids.length === 0) {
+      setPendingRevealKeys(null);
+      return;
+    }
     setRevealed(new Set(ids));
     void updateDeck(deckId, { revealed: ids });
     setPendingRevealKeys(null);
