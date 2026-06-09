@@ -158,8 +158,9 @@ wrangler pages deploy dist --project-name=anki-sheet --branch=main
 
 # プレビュー（フルアプリ・テスト用）: .env.public の VITE_PUBLIC=true
 npm run build:public
-wrangler pages deploy dist --project-name=anki-sheet --branch=ios-parity
-#  → https://ios-parity.anki-sheet.pages.dev
+wrangler pages deploy dist --project-name=anki-sheet --branch=preview
+#  → https://preview.anki-sheet.pages.dev
+#  （--branch は Cloudflare のエイリアス名。git ブランチとは無関係。旧 ios-parity 別名は未使用のまま残存）
 
 # D1 マイグレーション（remote 本番DB）
 wrangler d1 migrations apply anki-sheet-db --remote
