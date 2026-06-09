@@ -29,6 +29,13 @@ const DENSITY_LABELS: { key: Density; label: string }[] = [
   { key: "many", label: "多め" },
 ];
 
+type PageFilter = "all" | "todo" | "done";
+const PAGE_FILTERS: { key: PageFilter; label: string }[] = [
+  { key: "all", label: "すべて" },
+  { key: "todo", label: "未生成" },
+  { key: "done", label: "生成済み" },
+];
+
 export function QuizScreen({ deckId, from }: { deckId: number; from?: View }) {
   const setView = useApp((s) => s.setView);
   const user = useAuth((s) => s.user);
@@ -50,11 +57,13 @@ export function QuizScreen({ deckId, from }: { deckId: number; from?: View }) {
       if (!live) return;
       setDeck(d ?? null);
       setPageCount(pdf?.pageCount ?? 0);
+      // Register EVERY page that has an answer (memorization spot), pushing recovered text only when
+      // present — so pages whose answers have no extracted text still appear (the AI reads page text
+      // separately at generation time).
       const m = new Map<number, string[]>();
       for (const c of cards) {
-        if (!c.text?.trim()) continue;
         const arr = m.get(c.pageIndex) ?? [];
-        arr.push(c.text);
+        if (c.text?.trim()) arr.push(c.text);
         m.set(c.pageIndex, arr);
       }
       setTermsByPage(m);
@@ -183,9 +192,19 @@ function GenerateTab({
   const [rangeTo, setRangeTo] = useState("");
   const [progress, setProgress] = useState<GenProgress | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [filter, setFilter] = useState<PageFilter>("all");
 
   // Pages that have marked terms (only these can produce questions), ascending.
   const pages = useMemo(() => [...termsByPage.keys()].sort((a, b) => a - b), [termsByPage]);
+  const genCount = useMemo(
+    () => pages.filter((p) => (countsByPage.get(p) ?? 0) > 0).length,
+    [pages, countsByPage],
+  );
+  // Filter is DISPLAY-ONLY — selection (incl. hidden pages) is preserved across switches.
+  const displayPages = useMemo(() => {
+    if (filter === "all") return pages;
+    return pages.filter((p) => ((countsByPage.get(p) ?? 0) > 0) === (filter === "done"));
+  }, [pages, countsByPage, filter]);
 
   const toggle = (p: number) =>
     setSelected((prev) => {
@@ -318,13 +337,28 @@ function GenerateTab({
         </div>
       </div>
 
+      <div className="gen-row">
+        <span className="gen-label">表示</span>
+        <div className="preset-row">
+          {PAGE_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              className={`btn sm ${filter === f.key ? "primary" : ""}`}
+              onClick={() => setFilter(f.key)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <p className="muted small">
-        暗記箇所のあるページのみ表示しています（{pages.length}ページ）。チェックして「まとめて生成」。
-        生成済みページは枠を消費しません。
+        生成済み {genCount} / {pages.length} ページ。暗記箇所のあるページをチェックして「まとめて生成」
+        （生成済みページは枠を消費しません）。
       </p>
 
       <div className="page-picker">
-        {pages.map((p) => (
+        {displayPages.map((p) => (
           <PageCard
             key={p}
             doc={doc}
@@ -400,15 +434,24 @@ function PageCard({
     };
   }, [doc, pageIndex]);
 
+  const isGenerated = generated > 0;
+  // 4 distinct states: selection = top-right ✓ + sel border; generated = top-left 済 pill + teal count.
   return (
-    <button ref={ref} className={`page-card${selected ? " sel" : ""}`} onClick={onToggle}>
+    <button
+      ref={ref}
+      className={`page-card${selected ? " sel" : ""}${isGenerated ? " gen" : ""}`}
+      onClick={onToggle}
+    >
       <div className="page-thumb">
         {url ? <img src={url} alt={`${pageIndex + 1}ページ`} loading="lazy" /> : <span className="muted small">…</span>}
+        {isGenerated ? <span className="page-gen">済</span> : null}
         {selected ? <span className="page-check">✓</span> : null}
       </div>
       <div className="page-card-meta">
         <span>P.{pageIndex + 1}</span>
-        <span className="muted small">{generated ? `✓${generated}問` : `暗記${terms}`}</span>
+        <span className={isGenerated ? "gen-count" : "muted small"}>
+          {isGenerated ? `✓${generated}問` : `暗記${terms}`}
+        </span>
       </div>
     </button>
   );
