@@ -231,10 +231,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
         const seedAt = Date.now();
         let starMap: StarMap = d.starsLww ?? {};
         let bmMap: BmMap = d.bmLww ?? {};
-        // The ★ key scheme changed from ordinal to position (§4.4); an old map has 2-part keys
-        // ("5:1") that won't resolve. Treat such a map as legacy and rebuild it from the reliable
-        // local id set (d.starred) so existing ★ survive the upgrade instead of being cleared.
-        const starLegacy = Object.keys(starMap).some((k) => k.split(":").length < 3);
+        // The ★ key scheme is page:y:x:w:h (5 parts). Any other shape (old 2-part ordinal, or the
+        // earlier 3-part position key) is legacy and won't resolve — rebuild the map from the
+        // reliable local id set (d.starred) so existing ★ survive the upgrade instead of being cleared.
+        const starLegacy = Object.keys(starMap).some((k) => k.split(":").length !== 5);
         if (!d.starsLww || starLegacy || !d.bmLww) {
           const byPage = new Map<number, CardRow[]>();
           for (const c of await deckCards(deckId)) {

@@ -4,10 +4,12 @@ import { cardKey, cardKeyMaps, correspondCards } from "./cardKeys";
 const r = (x: number, y: number, w = 10, h = 8) => ({ x, y, w, h });
 
 describe("cardKey", () => {
-  it("is page + quantized answer position (NOT an ordinal), so it survives answer add/remove", () => {
-    expect(cardKey(5, r(12.4, 30.6))).toBe("5:31:12"); // round(y):round(x)
+  it("is page + quantized answer position AND size (NOT an ordinal), so it survives answer add/remove", () => {
+    expect(cardKey(5, r(12.4, 30.6))).toBe("5:31:12:10:8"); // page:round(y):round(x):round(w):round(h)
     // The SAME answer keeps its key regardless of how many other answers share the page.
     expect(cardKey(5, r(12.4, 30.6))).toBe(cardKey(5, r(12.4, 30.6)));
+    // Two answers whose TOP-LEFT rounds the same but differ in size get DISTINCT keys (dense page).
+    expect(cardKey(5, r(12.4, 30.6, 10, 8))).not.toBe(cardKey(5, r(12.4, 30.6, 40, 8)));
   });
 });
 
@@ -18,8 +20,8 @@ describe("cardKeyMaps", () => {
       { id: 2, pageIndex: 0, answerRect: r(10, 90) },
       { pageIndex: 0, answerRect: r(0, 0) }, // no id -> skipped
     ]);
-    expect(idToKey.get(1)).toBe("0:20:10");
-    expect(keyToId.get("0:90:10")).toBe(2);
+    expect(idToKey.get(1)).toBe("0:20:10:10:8");
+    expect(keyToId.get("0:90:10:10:8")).toBe(2);
     expect(idToKey.size).toBe(2);
   });
 });

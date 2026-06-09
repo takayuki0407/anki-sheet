@@ -8,13 +8,7 @@
 // Pro+ questions are stored in D1 (synced + the re-display cache); Standard questions are returned
 // only and kept LOCAL by the client (this endpoint never persists Standard rows).
 import { json, type Fn } from "../../_lib/types";
-import {
-  genLimitDuringTrial,
-  getTier,
-  getTrialUntil,
-  isUnlimited,
-  type Tier,
-} from "../../_lib/tier";
+import { genLimitDuringTrial, getTierAndTrial, isUnlimited } from "../../_lib/tier";
 
 const HARD_MAX = 6;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -137,8 +131,8 @@ async function callHaiku(apiKey: string, userMessage: string): Promise<RawQ[]> {
 // GET → current month's quota for this account (drives the client's "remaining" UI).
 export const onRequestGet: Fn = async (ctx) => {
   const uid = ctx.data.uid!;
-  const tier = await getTier(ctx.env, uid, ctx.data.email);
-  const limit = genLimitDuringTrial(tier, await getTrialUntil(ctx.env, uid), Date.now());
+  const { tier, trialUntil } = await getTierAndTrial(ctx.env, uid, ctx.data.email);
+  const limit = genLimitDuringTrial(tier, trialUntil, Date.now());
   const row = await ctx.env.DB.prepare(
     "SELECT count FROM generation_usage WHERE uid = ? AND period = ?",
   )
@@ -185,7 +179,7 @@ export const onRequestPost: Fn = async (ctx) => {
   if (typeof body.pageText !== "string" || !body.pageText.trim())
     return json({ error: "no_text" }, 422);
 
-  const tier: Tier = await getTier(ctx.env, uid, ctx.data.email);
+  const { tier, trialUntil } = await getTierAndTrial(ctx.env, uid, ctx.data.email);
   const isProPlus = isUnlimited(tier); // pro / premium / admin → questions stored in D1 (synced)
 
   // Cache: Pro+ re-display of an already-generated page returns the stored set (no quota, no API).
@@ -203,7 +197,7 @@ export const onRequestPost: Fn = async (ctx) => {
   // atomically BEFORE the API call (conditional +1) so concurrent requests can't double-spend the
   // monthly budget; a failed/empty generation refunds the slot below (we eat the API cost, not the
   // user's quota).
-  const limit = genLimitDuringTrial(tier, await getTrialUntil(ctx.env, uid), Date.now());
+  const limit = genLimitDuringTrial(tier, trialUntil, Date.now());
   const p = period();
   const reserve = await ctx.env.DB.prepare(
     `INSERT INTO generation_usage (uid, period, count) VALUES (?, ?, 1)

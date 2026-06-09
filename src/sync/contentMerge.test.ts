@@ -71,6 +71,20 @@ describe("normalizeContent", () => {
     expect(activeClozes(out)).toHaveLength(1);
     expect(out.clozes).toBeUndefined();
   });
+  it("re-keys entries to the canonical clozeKey so an old (3-part) key can't duplicate the answer", () => {
+    // A legacy 3-part key for an answer at bbox(0,100,20,10) + its new 5-part key must collapse to one.
+    const out = normalizeContent(
+      {
+        clozesLww: {
+          "0:100:0": { t: 5, pageIndex: 0, rects: [bx(0, 100)], bbox: bx(0, 100) },
+          "0:100:0:20:10": { t: 7, pageIndex: 0, rects: [bx(0, 100)], bbox: bx(0, 100) },
+        },
+      },
+      1,
+    );
+    expect(Object.keys(out.clozesLww ?? {})).toEqual(["0:100:0:20:10"]);
+    expect(activeClozes(out)).toHaveLength(1);
+  });
   it("ignores the legacy array (GET mirror) when a map is present — no tombstone resurrection", () => {
     const m: ClozeMap = {};
     removeCloze(m, 0, bx(0, 100), 50); // tombstone
@@ -88,7 +102,7 @@ describe("setActiveClozes (re-detect reconcile)", () => {
     const live = activeClozes({ clozesLww: m })
       .map((c) => clozeKey(c.pageIndex, c.bbox))
       .sort();
-    expect(live).toEqual(["0:100:0", "0:300:0"]);
+    expect(live).toEqual(["0:100:0:20:10", "0:300:0:20:10"]);
   });
 });
 
@@ -98,13 +112,13 @@ describe("clozeMapFromCards + tombstonesOf (client derive)", () => {
       { pageIndex: 0, rects: [bx(0, 100)], bbox: bx(0, 100), text: "a", t: 5 },
       { pageIndex: 0, rects: [bx(0, 200)], bbox: bx(0, 200), text: "b", t: 5 },
     ];
-    const map = clozeMapFromCards(cards, { "0:200:0": 9 }); // 200 deleted after it was added
+    const map = clozeMapFromCards(cards, { "0:200:0:20:10": 9 }); // 200 deleted after it was added
     expect(activeClozes({ clozesLww: map }).map((c) => clozeKey(c.pageIndex, c.bbox))).toEqual([
-      "0:100:0",
+      "0:100:0:20:10",
     ]);
-    expect(tombstonesOf(map)).toEqual({ "0:200:0": 9 });
+    expect(tombstonesOf(map)).toEqual({ "0:200:0:20:10": 9 });
     // A re-add (card t newer than the tombstone) makes it live again:
-    const map2 = clozeMapFromCards([{ ...cards[1], t: 12 }], { "0:200:0": 9 });
+    const map2 = clozeMapFromCards([{ ...cards[1], t: 12 }], { "0:200:0:20:10": 9 });
     expect(activeClozes({ clozesLww: map2 })).toHaveLength(1);
   });
 });

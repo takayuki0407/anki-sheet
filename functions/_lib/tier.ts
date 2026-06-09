@@ -62,6 +62,23 @@ export async function getTrialUntil(env: Env, uid: string): Promise<number> {
   return Number(row?.trial_until) || 0;
 }
 
+/** tier + trial in ONE read of the users row (the AI generate path needs both). */
+export async function getTierAndTrial(
+  env: Env,
+  uid: string,
+  email?: string,
+): Promise<{ tier: Tier; trialUntil: number }> {
+  const row = await env.DB.prepare("SELECT tier, trial_until FROM users WHERE uid = ?")
+    .bind(uid)
+    .first<{ tier: string; trial_until: number }>();
+  let tier: Tier;
+  if (row?.tier && TIERS.has(row.tier)) tier = row.tier as Tier;
+  else if (email && env.ADMIN_EMAIL && email.toLowerCase() === env.ADMIN_EMAIL.toLowerCase())
+    tier = "admin";
+  else tier = "free";
+  return { tier, trialUntil: Number(row?.trial_until) || 0 };
+}
+
 const TIERS = new Set<string>(["free", "standard", "pro", "premium", "admin"]);
 
 export async function getTier(env: Env, uid: string, email?: string): Promise<Tier> {
