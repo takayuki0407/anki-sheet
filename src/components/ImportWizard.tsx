@@ -8,7 +8,7 @@ import {
   type PdfDetectionResult,
 } from "../pdf/pdfEngine";
 import { PageOverlay } from "../render/PageOverlay";
-import { importBookmarks, importDeck } from "../db/repo";
+import { importBookmarks, importDeck, updateDeck } from "../db/repo";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
 import { cachedQuota, listBooks, registerBook } from "../sync/api";
@@ -201,6 +201,9 @@ export function ImportWizard() {
         color: colorRef.current,
         clozes: p.result.clozes,
       });
+      // Mark registered ONLY when the server genuinely reserved the slot — so reconcile can later
+      // follow an elsewhere-unregister without deleting an offline/fail-open local import.
+      if (p.registered) await updateDeck(deckId, { registered: true });
       if (p.result.outline.length) await importBookmarks(deckId, p.result.outline);
       // Pro cloud sync: upload the PDF + content in the background (best-effort; 403 on standard).
       if (useAuth.getState().user) void uploadDeck(p.bookId, deckId).catch(() => {});
@@ -225,12 +228,14 @@ export function ImportWizard() {
       // 402 (limit_reached) → block the import with an upgrade/trim message (the book is NOT kept).
       // Offline / signed-out / network errors fail OPEN (import locally) so the local-first
       // experience never breaks; the server re-checks on the next sync.
+      let registered = false; // only a GENUINE server registration marks the deck (not fail-open)
       if (useAuth.getState().user) {
         let r;
         try {
           r = await registerBook(pending.bookId, pending.deckName, result.pageCount);
+          if (r.ok) registered = true;
         } catch {
-          r = { ok: true }; // network/registry unreachable → fail open
+          r = { ok: true }; // network/registry unreachable → fail open (NOT registered on the server)
         }
         if (!r.ok && r.limitReached) {
           setPhase({
@@ -241,7 +246,7 @@ export function ImportWizard() {
           return;
         }
       }
-      await finishImport(pending);
+      await finishImport({ ...pending, registered });
     } catch (e) {
       setPhase({ k: "error", ...describeError(e) });
     }

@@ -13,6 +13,9 @@ export interface PendingImport {
   result: PdfDetectionResult;
   blob: Blob;
   limit: number;
+  /** Set only when the server registration GENUINELY succeeded (never on the offline/fail-open path),
+   * so reconcile can later follow an elsewhere-unregister without deleting an unsynced local import. */
+  registered?: boolean;
 }
 
 export function BookLimitDialog({
@@ -68,7 +71,7 @@ export function BookLimitDialog({
         load();
         return;
       }
-      await onImport(pending);
+      await onImport({ ...pending, registered: true }); // registerBook above succeeded
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
     } finally {

@@ -233,6 +233,7 @@ export async function downloadDeck(book: AccountBook): Promise<number> {
   await updateDeck(deckId, {
     contentAt: content.contentAt ?? 0, // baseline so we don't re-pull it
     clozeTomb: tombstonesOf(content.clozesLww ?? {}),
+    registered: true, // came from the account registry → reconcile may follow an elsewhere-unregister
   });
   return deckId;
 }

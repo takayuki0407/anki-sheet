@@ -87,6 +87,10 @@ export interface DeckRow {
   /** Tombstones for DELETED masks (clozeKey -> delete time), so a mask removed on one device isn't
    * resurrected by another's set on merge (P0-2). The live masks are the cards (t = createdAt). */
   clozeTomb?: Record<string, number>;
+  /** True once this book has been in the account registry (registered on import, downloaded, or seen
+   * as `known` on a sync). Lets reconcile distinguish an orphan (registered but now gone from the
+   * account → another device unregistered it → delete locally) from a fresh local-only import. */
+  registered?: boolean;
 }
 
 export interface PdfRow {

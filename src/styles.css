@@ -1326,6 +1326,21 @@ body {
   color: var(--muted);
   white-space: nowrap;
 }
+.cloud-badge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.cloud-badge.ok {
+  color: #2a6f97;
+  background: #e3f0f7;
+}
+.cloud-badge.warn {
+  color: #9a6a00;
+  background: #fbf0d9;
+}
 
 /* Plan comparison (Info screen) */
 .plan-compare {

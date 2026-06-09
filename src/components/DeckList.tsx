@@ -148,13 +148,27 @@ export function DeckList() {
         // copy. Pro+ (sync) keeps multi-device copies, so this only runs for non-sync tiers.
         const me = deviceLabel();
         const singleHome = !u.unlimited;
+        // Only a NON-empty response is authoritative for the *destructive* orphan cleanup below: a
+        // transient empty/partial `listBooks` must never wipe registered local books.
+        const canPrune = u.books.length > 0;
         // Reconcile favorite / latest-opened against a fresh read of the local decks (not the live
         // query) so a later optimistic toggle isn't clobbered. Server is authoritative for favorite.
         for (const local of locals) {
           if (local.id == null || !local.bookId) continue;
           if (known.has(local.bookId) && !active.has(local.bookId)) {
-            await deleteDeck(local.id); // trimmed on the account → follow
+            await deleteDeck(local.id); // trimmed/retained on the account → follow
             void deleteBookQuestions(local.bookId).catch(() => {});
+            continue;
+          }
+          if (!known.has(local.bookId)) {
+            // Orphan cleanup (non-sync): a book we PREVIOUSLY registered is gone from the account →
+            // another device unregistered it (freed the slot, e.g. cleared a size=0 device-only book
+            // from its cloud section). Drop our stale local copy. A never-registered book (fresh
+            // offline import not yet synced) is left alone.
+            if (singleHome && canPrune && local.registered) {
+              await deleteDeck(local.id);
+              void deleteBookQuestions(local.bookId).catch(() => {});
+            }
             continue;
           }
           const b = u.books.find((x) => x.book_id === local.bookId);
@@ -164,9 +178,10 @@ export function DeckList() {
             void deleteBookQuestions(local.bookId).catch(() => {});
             continue;
           }
-          const patch: { favorite?: boolean; openedAt?: number } = {};
+          const patch: { favorite?: boolean; openedAt?: number; registered?: boolean } = {};
           if (!!local.favorite !== !!b.favorite) patch.favorite = !!b.favorite;
           if ((b.opened_at ?? 0) > (local.openedAt ?? 0)) patch.openedAt = b.opened_at;
+          if (!local.registered) patch.registered = true; // seen in the account → enable future orphan cleanup
           if (Object.keys(patch).length) await updateDeck(local.id, patch);
         }
         void backfillCloudIfPro(); // Pro: upload any local book that has no cloud file yet
@@ -180,15 +195,27 @@ export function DeckList() {
   }, [user]);
 
   const localIds = new Set(((decks ?? []).map((d) => d.bookId).filter(Boolean) as string[]));
-  // Cloud section = ACTIVE account books not on this device (retained/trimmed books aren't offered).
-  const remote = (cloud ?? []).filter(
-    (b) => !localIds.has(b.book_id) && (b.status ?? "active") === "active",
-  );
+  const me = deviceLabel();
+  // Cloud section = ACTIVE account books not on this device (retained/trimmed are never offered).
+  //  • Pro+ (sync): every active book not held locally — incl. zero-holder ones (downloadable/restore).
+  //  • Standard/Free (non-sync): ONLY books held by ANOTHER device (`device` set, ≠ me), size-agnostic
+  //    — so a size=0 device-only book can be cleared from here to free the slot. Zero-holder/retained
+  //    books are NOT shown (nothing to download, and they're managed from the bookshelf).
+  const remote = (cloud ?? []).filter((b) => {
+    if ((b.status ?? "active") !== "active") return false;
+    if (localIds.has(b.book_id)) return false;
+    if (cloudPro) return true;
+    return !!b.device && b.device !== me;
+  });
   // Books the account has a downloadable cloud blob for (size>0). A LOCAL delete of a book with NO
   // cloud blob must ALSO free its account slot — otherwise it lingers as a phantom row that counts
   // toward the cap, can't be restored, and (pre-fix) was hidden from the cloud list.
   const cloudLoaded = cloud != null;
   const cloudBlobIds = new Set((cloud ?? []).filter((b) => b.size > 0).map((b) => b.book_id));
+  // Drop a book from the cloud state immediately after it's released (retain/unregister), so a
+  // bookshelf delete never flashes the same book into the cloud section before the next listBooks.
+  const removeFromCloud = (id: string) =>
+    setCloud((c) => c?.filter((x) => x.book_id !== id) ?? null);
 
   const onExport = async () => {
     const blob = await exportBackup();
@@ -270,6 +297,7 @@ export function DeckList() {
                   (v.deck.bookId && cloud?.find((b) => b.book_id === v.deck.bookId)?.device) || null
                 }
                 nonSync={cloudLoaded && !cloudPro}
+                onCloudRemoved={removeFromCloud}
               />
             ))}
           </div>
@@ -280,10 +308,9 @@ export function DeckList() {
         <div className="cloud-section">
           <h3 className="section">クラウド（この端末にない本）</h3>
           <p className="muted small">
-            同じアカウントの本です。
-            {cloudPro && "「この端末に取り込む」で追加、"}
-            「クラウドから削除」ですべての端末から完全に削除します。クラウド保存のない本
-            （他端末のみ・アップロード未完了）はダウンロードできませんが、「クラウドから削除」で枠を空けられます。
+            {cloudPro
+              ? "同じアカウントの本です。「この端末に取り込む」で追加、「クラウドから完全に削除」ですべての端末から削除します。"
+              : "他の端末にある本です。各本の「…から削除（枠を空ける）」で、この端末のアカウント枠を空けられます。クラウド保存がある本はProに戻すと復元できますが、ない本（端末のみ）は復元できません。"}
           </p>
           <ul className="cloud-list">
             {remote.map((b) => (
@@ -291,7 +318,7 @@ export function DeckList() {
                 key={b.book_id}
                 book={b}
                 canDownload={cloudPro}
-                onRemoved={(id) => setCloud((c) => c?.filter((x) => x.book_id !== id) ?? null)}
+                onRemoved={removeFromCloud}
               />
             ))}
           </ul>
@@ -301,8 +328,10 @@ export function DeckList() {
   );
 }
 
-/** A Pro cloud book not on this device — download it back, or permanently remove it from the cloud
- * (which deletes the R2 file + registry row for the whole account). */
+/** A cloud account book not on this device. Pro+ (canDownload): download it back, or permanently
+ * delete it from the cloud (R2 file + registry row, whole account). Standard/Free: a SINGLE action
+ * frees the account slot held by another device — retain (size>0, R2 kept, re-Pro restorable) or
+ * unregister (size=0, device-only → permanent). The holder then drops its local copy on reconcile. */
 function CloudBook({
   book,
   canDownload,
@@ -314,6 +343,10 @@ function CloudBook({
 }) {
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  // size>0 = a real cloud copy (restorable on re-Pro); size=0 = device-only (delete = permanent).
+  const hasBlob = book.size > 0;
+  const holder = book.device || "";
+  const title = book.name || "（無題）";
   const download = async () => {
     setBusy(true);
     setErrMsg(null);
@@ -327,63 +360,72 @@ function CloudBook({
       setBusy(false);
     }
   };
-  const remove = async () => {
+  // Pro+ : permanently delete from the cloud for ALL devices (R2 + registry row + progress).
+  const removePermanent = async () => {
     if (
       !confirm(
-        `「${book.name || "（無題）"}」をクラウドから完全に削除しますか？\nすべての端末から取り込めなくなります。この操作は元に戻せません。`,
+        `「${title}」をクラウドから完全に削除しますか？\nすべての端末から取り込めなくなります。この操作は元に戻せません。`,
       )
     )
       return;
     setBusy(true);
     setErrMsg(null);
     try {
-      await unregisterBook(book.book_id); // deletes the R2 PDF/content + registry row + progress
+      await unregisterBook(book.book_id);
       onRemoved(book.book_id);
     } catch (e) {
       setErrMsg(syncErrorMessage(e));
       setBusy(false);
     }
   };
-  // Non-destructive release for a cloud-only active book on a non-sync tier: retain it (frees the
-  // slot, keeps R2 for re-Pro restore) instead of permanently deleting.
-  const retain = async () => {
+  // Standard/Free : single action — free the account slot another device is holding. size>0 → retain
+  // (frees the slot, keeps R2 for re-Pro restore); size=0 → unregister (permanent). Always confirm,
+  // and warn harder when there's no cloud copy to restore from.
+  const release = async () => {
+    const where = holder ? `「${holder}」` : "別の端末";
+    const msg = hasBlob
+      ? `${where}に保存中の「${title}」を削除して枠を空けますか？\nProに戻すと復元できます（保持〜約6ヶ月）。`
+      : `${where}に保存中の「${title}」を削除して枠を空けますか？\n⚠ クラウドに保存がないため、削除すると復元できません。`;
+    if (!confirm(msg)) return;
     setBusy(true);
     setErrMsg(null);
     try {
-      await retainBook(book.book_id);
+      if (hasBlob) await retainBook(book.book_id);
+      else await unregisterBook(book.book_id);
       onRemoved(book.book_id);
     } catch (e) {
       setErrMsg(syncErrorMessage(e));
       setBusy(false);
     }
   };
-  // Download needs a cloud blob (size>0) AND a tier that can restore (Pro+). size=0 = no cloud copy
-  // (other-device-only / never uploaded). Either way「クラウドから削除」frees the account slot.
-  const hasBlob = book.size > 0;
   return (
     <li className="cloud-item">
-      <span className="cloud-name">{book.name || "（無題）"}</span>
-      <span className="cloud-device">
-        {hasBlob ? book.device || "クラウドのみ" : "クラウド保存なし"}
+      <span className="cloud-name">{title}</span>
+      <span className={`cloud-badge ${hasBlob ? "ok" : "warn"}`}>
+        {hasBlob ? "☁️ クラウドあり" : "端末のみ（復元不可）"}
       </span>
-      {hasBlob && canDownload && (
-        <button className="btn sm" onClick={download} disabled={busy}>
-          {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
-        </button>
-      )}
-      {hasBlob && !canDownload && (
+      <span className="cloud-device">{holder ? `「${holder}」に保存` : "クラウドのみ"}</span>
+      {canDownload ? (
+        <>
+          {hasBlob && (
+            <button className="btn sm" onClick={download} disabled={busy}>
+              {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
+            </button>
+          )}
+          <button className="btn sm ghost" onClick={removePermanent} disabled={busy}>
+            クラウドから完全に削除
+          </button>
+        </>
+      ) : (
         <button
           className="btn sm ghost"
-          onClick={retain}
+          onClick={release}
           disabled={busy}
-          title="枠を空けます（クラウドに退避・Proで復元可）"
+          title={hasBlob ? "枠を空けます（クラウドに退避・Proで復元可）" : "枠を空けます（復元不可）"}
         >
-          枠から外す
+          {holder ? `「${holder}」から削除（枠を空ける）` : "削除して枠を空ける"}
         </button>
       )}
-      <button className="btn sm ghost" onClick={remove} disabled={busy}>
-        クラウドから削除
-      </button>
       {errMsg && <p className="cloud-error">{errMsg}</p>}
     </li>
   );
@@ -396,6 +438,7 @@ function DeckBook({
   cloudBacked,
   cloudDevice,
   nonSync,
+  onCloudRemoved,
 }: {
   deck: DeckRow;
   count: number;
@@ -408,6 +451,9 @@ function DeckBook({
   /** true = a known NON-sync tier (Standard/Free): a cloud-backed local delete RETAINS the book
    * (frees the slot, keeps R2) instead of leaving a stuck cloud-only active row. */
   nonSync: boolean;
+  /** Drop a just-released book from the parent's cloud state, so it doesn't flash into the cloud
+   * section between this local delete and the next listBooks (called on retain/unregister only). */
+  onCloudRemoved: (bookId: string) => void;
 }) {
   const setView = useApp((s) => s.setView);
   const cover = useCover(deck.id!);
@@ -437,9 +483,11 @@ function DeckBook({
       void deleteBookQuestions(deck.bookId).catch(() => {}); // drop this device's AI questions
       if (freeSlotOnDelete) {
         void unregisterBook(deck.bookId).catch(() => {}); // size=0 → permanent, frees the slot
+        onCloudRemoved(deck.bookId); // don't flash it into the cloud section
       } else if (cloudBacked === true && nonSync) {
         // Standard/Free: retain (active→retained) — frees the slot, keeps R2 for re-Pro restore.
         void retainBook(deck.bookId).catch(() => {});
+        onCloudRemoved(deck.bookId); // retained ⇒ no longer active ⇒ drop from the cloud section now
       } else if (cloudBacked === true && cloudDevice === deviceLabel()) {
         // Pro+ holder: keep the book active (re-downloadable); just release the holder so the
         // bookshelf stops showing this device ("cloud-only").
