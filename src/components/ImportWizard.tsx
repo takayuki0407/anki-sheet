@@ -11,7 +11,7 @@ import { PageOverlay } from "../render/PageOverlay";
 import { importBookmarks, importDeck } from "../db/repo";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
-import { listBooks, registerBook } from "../sync/api";
+import { cachedQuota, listBooks, registerBook } from "../sync/api";
 import { uploadDeck } from "../sync/deck";
 import { BookLimitDialog, type PendingImport } from "./BookLimitDialog";
 import {
@@ -126,7 +126,17 @@ export function ImportWizard() {
         return;
       }
     } catch {
-      /* fail open — keep local-first import working when the account is unreachable */
+      // Offline: enforce the LAST-SEEN server quota (§2.2a). A stale cache errs toward blocking, never
+      // a bypass; no cache yet (never synced) falls open and the server re-checks on register.
+      const q = cachedQuota();
+      if (q && !q.unlimited && q.count >= q.limit) {
+        setPhase({
+          k: "error",
+          message: `本はプランの上限（${q.limit} 冊）に達しています（オフラインのため最後に確認した枠で判定）。オンラインに戻るか、不要な本を削除してください。`,
+          detail: `cached account books: ${q.count} / ${q.limit}`,
+        });
+        return;
+      }
     }
     setName(file.name.replace(/\.pdf$/i, ""));
     setPhase({ k: "configuring", blob: file.slice(0, file.size, "application/pdf") });

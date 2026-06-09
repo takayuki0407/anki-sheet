@@ -121,7 +121,39 @@ export interface AccountBooks {
 export async function listBooks(): Promise<AccountBooks> {
   const res = await authedFetch("/books");
   if (!res.ok) throw new Error(`list failed: ${res.status}`);
-  return res.json();
+  const data = (await res.json()) as AccountBooks;
+  cacheQuota(data); // remember the server's view of the cap for offline import enforcement (§2.2a)
+  return data;
+}
+
+// §2.2(a) Offline import enforcement: each sync caches the account's used/total slots; when offline
+// we block import on this LAST-SEEN server quota instead of the local deck count. A stale cache errs
+// toward blocking (never a bypass). Full offline prevention is impossible (the device is the user's),
+// but this stops casual circumvention; the paid value (sync/AI/storage) is server-gated regardless.
+const QUOTA_KEY = "kioku-quota-cache";
+export interface QuotaCache {
+  count: number;
+  limit: number;
+  unlimited: boolean;
+}
+function cacheQuota(b: AccountBooks): void {
+  try {
+    localStorage.setItem(
+      QUOTA_KEY,
+      JSON.stringify({ count: b.count, limit: b.limit, unlimited: b.unlimited }),
+    );
+  } catch {
+    /* storage unavailable — caching is best-effort */
+  }
+}
+/** The last-seen server quota (or null if we've never synced on this device). */
+export function cachedQuota(): QuotaCache | null {
+  try {
+    const s = localStorage.getItem(QUOTA_KEY);
+    return s ? (JSON.parse(s) as QuotaCache) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Admin-only TEST helper: set the signed-in account's own tier (and optionally backdate
