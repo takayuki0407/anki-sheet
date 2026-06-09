@@ -173,6 +173,11 @@ export function DeckList() {
   const remote = (cloud ?? []).filter(
     (b) => !localIds.has(b.book_id) && (b.status ?? "active") === "active",
   );
+  // Books the account has a downloadable cloud blob for (size>0). A LOCAL delete of a book with NO
+  // cloud blob must ALSO free its account slot — otherwise it lingers as a phantom row that counts
+  // toward the cap, can't be restored, and (pre-fix) was hidden from the cloud list.
+  const cloudLoaded = cloud != null;
+  const cloudBlobIds = new Set((cloud ?? []).filter((b) => b.size > 0).map((b) => b.book_id));
 
   const onExport = async () => {
     const blob = await exportBackup();
@@ -240,29 +245,35 @@ export function DeckList() {
         <div className="bookshelf">
           <div className="book-grid">
             {sorted.map((v) => (
-              <DeckBook key={v.deck.id} deck={v.deck} count={v.count} />
+              <DeckBook
+                key={v.deck.id}
+                deck={v.deck}
+                count={v.count}
+                freeSlotOnDelete={
+                  cloudLoaded && !!v.deck.bookId && !cloudBlobIds.has(v.deck.bookId)
+                }
+              />
             ))}
           </div>
         </div>
       )}
 
-      {cloudPro && remote.some((b) => b.size > 0) && (
+      {cloudPro && remote.length > 0 && (
         <div className="cloud-section">
           <h3 className="section">クラウド（この端末にない本）</h3>
           <p className="muted small">
             同じアカウントの本です。「この端末に取り込む」で追加、「クラウドから削除」で
-            すべての端末から完全に削除します。
+            すべての端末から完全に削除します。クラウド保存のない本（他端末のみ・アップロード未完了）は
+            ダウンロードできませんが、「クラウドから削除」で枠を空けられます。
           </p>
           <ul className="cloud-list">
-            {remote
-              .filter((b) => b.size > 0)
-              .map((b) => (
-                <CloudBook
-                  key={b.book_id}
-                  book={b}
-                  onRemoved={(id) => setCloud((c) => c?.filter((x) => x.book_id !== id) ?? null)}
-                />
-              ))}
+            {remote.map((b) => (
+              <CloudBook
+                key={b.book_id}
+                book={b}
+                onRemoved={(id) => setCloud((c) => c?.filter((x) => x.book_id !== id) ?? null)}
+              />
+            ))}
           </ul>
         </div>
       )}
@@ -305,13 +316,17 @@ function CloudBook({ book, onRemoved }: { book: AccountBook; onRemoved: (bookId:
       setBusy(false);
     }
   };
+  // size === 0 → no cloud blob (other-device-only / never uploaded): can't download, only remove.
+  const hasBlob = book.size > 0;
   return (
     <li className="cloud-item">
       <span className="cloud-name">{book.name || "（無題）"}</span>
-      <span className="cloud-device">{book.device ?? ""}</span>
-      <button className="btn sm" onClick={download} disabled={busy}>
-        {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
-      </button>
+      <span className="cloud-device">{hasBlob ? (book.device ?? "") : "クラウド保存なし"}</span>
+      {hasBlob && (
+        <button className="btn sm" onClick={download} disabled={busy}>
+          {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
+        </button>
+      )}
       <button className="btn sm ghost" onClick={remove} disabled={busy}>
         クラウドから削除
       </button>
@@ -320,7 +335,15 @@ function CloudBook({ book, onRemoved }: { book: AccountBook; onRemoved: (bookId:
   );
 }
 
-function DeckBook({ deck, count }: { deck: DeckRow; count: number }) {
+function DeckBook({
+  deck,
+  count,
+  freeSlotOnDelete,
+}: {
+  deck: DeckRow;
+  count: number;
+  freeSlotOnDelete: boolean;
+}) {
   const setView = useApp((s) => s.setView);
   const cover = useCover(deck.id!);
 
@@ -338,11 +361,15 @@ function DeckBook({ deck, count }: { deck: DeckRow; count: number }) {
       )
     )
       return;
-    // Local-only delete: do NOT remove the cloud copy. The account's cloud master persists so OTHER
-    // devices keep it and this device can re-download it later. Permanent cloud deletion is the
-    // explicit「クラウドから削除」action in the cloud section.
+    // Local-only delete: a book WITH a cloud blob is kept in the account (other devices keep it, this
+    // device can re-download it). But a book with NO cloud blob (Standard, or an upload that never
+    // finished) isn't stored anywhere — keeping its registry row would just leak a cap slot as an
+    // unrecoverable phantom, so we unregister it too (frees the slot for the whole account).
     await deleteDeck(deck.id!);
-    if (deck.bookId) void deleteBookQuestions(deck.bookId).catch(() => {}); // drop this device's AI questions
+    if (deck.bookId) {
+      void deleteBookQuestions(deck.bookId).catch(() => {}); // drop this device's AI questions
+      if (freeSlotOnDelete) void unregisterBook(deck.bookId).catch(() => {});
+    }
   };
   const toggleFav = (e: React.MouseEvent) => {
     e.stopPropagation();
