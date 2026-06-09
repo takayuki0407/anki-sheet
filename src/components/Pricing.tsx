@@ -24,7 +24,7 @@ const PLANS = [
     key: "standard",
     name: "Standard",
     monthly: 300,
-    yearly: 2500,
+    yearly: 3000,
     tagline: "基本の暗記機能をすべて。たっぷり10冊。",
     features: [
       "本を10冊まで取り込み",
@@ -40,7 +40,7 @@ const PLANS = [
     key: "pro",
     name: "Pro",
     monthly: 600,
-    yearly: 5000,
+    yearly: 6000,
     tagline: "全部入り。端末をまたいでどこでも。",
     features: [
       "本を無制限に取り込み",
@@ -55,7 +55,7 @@ const PLANS = [
     key: "premium",
     name: "Premium",
     monthly: 980,
-    yearly: 8000,
+    yearly: 9800,
     tagline: "Pro のすべて＋AIが復習を最適化。",
     features: [
       "Pro のすべて",
@@ -100,7 +100,7 @@ export function Pricing() {
             月額
           </button>
           <button className={annual ? "on" : ""} onClick={() => setAnnual(true)}>
-            年額<span className="save">約30%お得</span>
+            年額<span className="save">2ヶ月分お得</span>
           </button>
         </div>
       </section>

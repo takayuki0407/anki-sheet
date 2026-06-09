@@ -326,7 +326,7 @@ export function Info() {
                   <p className="plan-price">
                     ¥300<span className="muted small"> /月</span>
                     <br />
-                    <span className="muted small">¥2,500 /年</span>
+                    <span className="muted small">¥3,000 /年</span>
                   </p>
                   <ul>
                     <li>本を10冊まで取り込み</li>
@@ -337,7 +337,7 @@ export function Info() {
                   <p className="plan-price">
                     ¥600<span className="muted small"> /月</span>
                     <br />
-                    <span className="muted small">¥5,000 /年</span>
+                    <span className="muted small">¥6,000 /年</span>
                   </p>
                   <ul>
                     <li>本を無制限に取り込み</li>
