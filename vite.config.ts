@@ -23,10 +23,10 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["icon-192.png", "icon-512.png"],
       manifest: {
-        name: "Anki-sheet",
-        short_name: "Anki-sheet",
+        name: "Kiokumate",
+        short_name: "Kiokumate",
         lang: "ja",
-        description: "色付き答えのPDFを取り込むと、答えを自動で検出して隠せる暗記ツール",
+        description: "隠して覚え、解いて確かめる。色付き答えのPDFを取り込むと、答えを自動で検出して隠せる暗記ツール",
         start_url: "/",
         scope: "/",
         display: "standalone",

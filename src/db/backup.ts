@@ -71,7 +71,9 @@ export async function exportBackup(): Promise<Blob> {
 /** Replace the entire DB from a backup file. */
 export async function importBackup(file: File): Promise<void> {
   const data = JSON.parse(await file.text()) as BackupFile;
-  if (data.app !== "anki-sheet") throw new Error("Anki-sheetのバックアップではありません");
+  // NOTE: the on-disk marker stays "anki-sheet" for backward-compat with existing backup files;
+  // only the user-facing message uses the new brand.
+  if (data.app !== "anki-sheet") throw new Error("Kiokumate のバックアップではありません");
 
   // Decode blobs BEFORE the transaction (fetch is not allowed inside a Dexie tx).
   const pdfRows = await Promise.all(

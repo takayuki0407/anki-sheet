@@ -176,7 +176,7 @@ export function DeckList() {
 
   const onExport = async () => {
     const blob = await exportBackup();
-    downloadBlob(blob, `anki-sheet-backup-${dateStamp()}.json`);
+    downloadBlob(blob, `kiokumate-backup-${dateStamp()}.json`);
   };
 
   const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {

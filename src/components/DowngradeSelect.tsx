@@ -47,7 +47,7 @@ export function DowngradeSelect({
   const backup = useCallback(async () => {
     try {
       const blob = await exportBackup();
-      downloadBlob(blob, `anki-sheet-backup-${dateStamp()}.json`);
+      downloadBlob(blob, `kiokumate-backup-${dateStamp()}.json`);
       setBackedUp(true);
     } catch (e) {
       alert("バックアップに失敗しました: " + (e instanceof Error ? e.message : String(e)));

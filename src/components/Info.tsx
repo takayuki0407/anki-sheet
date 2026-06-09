@@ -13,7 +13,7 @@ const SUPPORT_EMAIL = "zabieru.0407@gmail.com";
 
 const FAQ = [
   {
-    q: "Anki-sheetとは？",
+    q: "Kiokumate（キオクメイト）とは？",
     a: "色付きの答え（赤・マゼンタなど）が印刷されたPDFを取り込むと、答えの部分を自動で検出して隠せます。タップで答えを確認しながら暗記でき、隠し方は『赤マスク』（答えを個別に隠す）と『赤シート』（半透明のシートをスライド）から選べます。PDFの解析は端末内で完結します（解析のために送信されることはありません）。クラウド同期（Pro）を使う場合のみ、ご自身の端末間で共有するためにPDFがアカウントに保存されます。",
   },
   {
@@ -368,7 +368,7 @@ export function Info() {
         <h3 className="section">サポート・規約</h3>
         <ul className="info-links">
           <li>
-            <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Anki-sheet お問い合わせ")}`}>
+            <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Kiokumate お問い合わせ")}`}>
               お問い合わせ
             </a>
           </li>
@@ -388,7 +388,7 @@ export function Info() {
       <section className="info-section">
         <h3 className="section">このアプリについて</h3>
         <div className="info-card">
-          <p className="small">Anki-sheet</p>
+          <p className="small">Kiokumate（キオクメイト）</p>
           <p className="small">
             <button className="linklike" onClick={() => setView({ name: "home" })}>
               製品紹介・料金プランページ →

@@ -7,8 +7,8 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="site-footer-inner">
         <div className="site-footer-brand">
-          <strong>Anki-sheet</strong>
-          <span className="muted small">色付き答えのPDFを、そのまま暗記ツールに</span>
+          <strong>Kiokumate</strong>
+          <span className="muted small">隠して覚え、解いて確かめる。</span>
         </div>
         <div className="site-footer-links">
           <button className="link-btn" onClick={() => setView({ name: "home" })}>
@@ -31,7 +31,7 @@ export function SiteFooter() {
           </a>
         </div>
       </div>
-      <p className="site-footer-copy muted small">© 2026 Anki-sheet</p>
+      <p className="site-footer-copy muted small">© 2026 Kiokumate</p>
     </footer>
   );
 }

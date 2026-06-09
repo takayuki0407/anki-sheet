@@ -77,7 +77,7 @@ export function App() {
         <header className="topbar">
           <button className="brand brand-btn" onClick={() => setView({ name: "decks" })}>
             <img src="/icon.svg" className="brand-icon" alt="" />
-            Anki-sheet
+            Kiokumate
           </button>
           {view.name !== "info" && (
             <button className="btn ghost sm topbar-info" onClick={() => setView({ name: "info" })}>

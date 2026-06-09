@@ -17,7 +17,7 @@ export function ComingSoon() {
         background: "#fffdf7",
       }}
     >
-      <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>Anki-sheet</h1>
+      <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>Kiokumate</h1>
       <p style={{ margin: 0, fontSize: 16, color: "#666" }}>ただいま準備中です。</p>
       <p style={{ margin: 0, fontSize: 14, color: "#999" }}>
         公開までもうしばらくお待ちください。
