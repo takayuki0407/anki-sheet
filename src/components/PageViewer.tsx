@@ -287,7 +287,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
             if (merged.lastMode) setMode(merged.lastMode);
             if (merged.redMode) setRedMode(merged.redMode);
             if (merged.sheetBand) setBand(merged.sheetBand);
-            setPendingRevealKeys(cloud.data.revealedKeys ?? []); // applied once cards load
+            // revealed rides the position group (whole-set LWW). Adopt cloud's ONLY when cloud's
+            // position is newer; otherwise keep this device's revealed (restored from d.revealed
+            // above) — adopting an older cloud set would wipe newer local reveals.
+            if ((cloud.data.posAt ?? 0) > (d.progressAt ?? 0))
+              setPendingRevealKeys(cloud.data.revealedKeys ?? []); // applied once cards load
             setPendingStarKeys(activeStarKeys(merged)); // ditto (portable keys -> local ids)
             void replaceBookmarks(deckId, activeBookmarks(merged)).catch(() => {}); // merged しおり
             void updateDeck(deckId, {
