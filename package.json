@@ -17,7 +17,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:shared": "node scripts/check-shared.mjs"
   },
   "dependencies": {
     "colord": "2.9.3",
