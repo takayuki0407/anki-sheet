@@ -8,7 +8,7 @@
 // Pro+ questions are stored in D1 (synced + the re-display cache); Standard questions are returned
 // only and kept LOCAL by the client (this endpoint never persists Standard rows).
 import { json, type Fn } from "../../_lib/types";
-import { genPageLimit, getTier, type Tier } from "../../_lib/tier";
+import { genPageLimit, getTier, isUnlimited, type Tier } from "../../_lib/tier";
 
 const HARD_MAX = 6;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -180,7 +180,7 @@ export const onRequestPost: Fn = async (ctx) => {
     return json({ error: "no_text" }, 422);
 
   const tier: Tier = await getTier(ctx.env, uid, ctx.data.email);
-  const isProPlus = tier === "pro" || tier === "admin";
+  const isProPlus = isUnlimited(tier); // pro / premium / admin → questions stored in D1 (synced)
 
   // Cache: Pro+ re-display of an already-generated page returns the stored set (no quota, no API).
   // Standard manages its cache locally and only calls this for ungenerated pages.

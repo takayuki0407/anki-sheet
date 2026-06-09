@@ -58,8 +58,10 @@ export default {
 /** Delete preserved cloud data for every account non-Pro for > RETENTION_MS. */
 async function purgeExpired(env: Env): Promise<void> {
   const cutoff = Date.now() - RETENTION_MS;
+  // Only purge accounts on a NON cloud-bearing tier. Excludes pro/premium/admin so an active paying
+  // subscriber's data is never deleted even if a stale downgraded_at lingers (§4.3 safety).
   const { results } = await env.DB.prepare(
-    "SELECT uid FROM users WHERE downgraded_at IS NOT NULL AND downgraded_at < ? AND tier <> 'pro'",
+    "SELECT uid FROM users WHERE downgraded_at IS NOT NULL AND downgraded_at < ? AND tier NOT IN ('pro','premium','admin')",
   )
     .bind(cutoff)
     .all<{ uid: string }>();

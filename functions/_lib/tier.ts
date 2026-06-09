@@ -1,47 +1,63 @@
-// Plan limits + the tier lookup, shared by the sync handlers.
-//   Standard ¥300/mo: 10 books (account-global), NO cloud sync.
-//   Pro ¥600/mo:      unlimited books, cloud sync up to 5GB, 100MB/file.
-// Tier lives in users.tier, kept fresh by the RevenueCat webhook (TODO). Until that's wired,
-// getTier returns 'standard' for everyone — so Pro-gated routes (blob/progress) 403 until a
-// user's tier is set (manually in D1 for testing, or by the webhook in production).
+// Plan limits + the tier lookup, shared by the sync handlers. Account-wide caps (Phase 1 overhaul).
+//   Free ¥0:        1 book,  AI 1 page/mo,   NO cloud sync.
+//   Standard ¥300:  10 books, AI 10 page/mo, NO cloud sync.
+//   Pro ¥600:       unlimited, AI 30 page/mo, cloud sync (5GB / 100MB-file).
+//   Premium ¥980 (Phase 2): unlimited, AI 200 page/mo, cloud sync + adaptive SRS.
+//   admin:          unlimited everything (the developer account, by verified email).
+// Tier lives in users.tier, set by the RevenueCat webhook. A signed-in account with NO subscription
+// is Free (NOT Standard) — Free is the floor, incl. the post-trial fallback.
 import type { Env } from "./types";
 
+export const FREE_DECK_LIMIT = 1;
 export const STANDARD_DECK_LIMIT = 10;
-export const PRO_STORAGE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB total (Pro cloud cap)
+export const PRO_STORAGE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB total (Pro+ cloud cap)
 export const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per file
+export const TRIAL_GEN_PAGES = 30; // AI budget during the 7-day trial (capped, separate from tier)
 
-export type Tier = "standard" | "pro" | "admin";
+export type Tier = "free" | "standard" | "pro" | "premium" | "admin";
 
-/** 'admin' (the developer account, by email) and 'pro' are unlimited; 'standard' is capped. */
+/** Pro / Premium / admin get unlimited books + cloud sync. Free / Standard are capped, no sync. */
 export function isUnlimited(t: Tier): boolean {
-  return t === "pro" || t === "admin";
+  return t === "pro" || t === "premium" || t === "admin";
 }
+/** Whether the tier gets cloud sync (PDF/content/progress/questions). */
+export function canSync(t: Tier): boolean {
+  return isUnlimited(t);
+}
+/** Account-wide book cap. */
 export function limitFor(t: Tier): number {
-  return isUnlimited(t) ? Number.MAX_SAFE_INTEGER : STANDARD_DECK_LIMIT;
+  if (isUnlimited(t)) return Number.MAX_SAFE_INTEGER;
+  if (t === "standard") return STANDARD_DECK_LIMIT;
+  return FREE_DECK_LIMIT; // free
+}
+/** Monthly AI question-generation page budget per tier. */
+export function genPageLimit(t: Tier): number {
+  switch (t) {
+    case "admin":
+      return Number.MAX_SAFE_INTEGER;
+    case "premium":
+      return 200;
+    case "pro":
+      return 30;
+    case "standard":
+      return 10;
+    default:
+      return 1; // free
+  }
 }
 
-// Monthly AI question-generation page budget per tier (phase 1). Distinct from limitFor (book
-// count). admin is unlimited. (Phase 2 adds Premium = 200.)
-export const GEN_PAGE_STANDARD = 10;
-export const GEN_PAGE_PRO = 30;
-export function genPageLimit(t: Tier): number {
-  if (t === "admin") return Number.MAX_SAFE_INTEGER;
-  if (t === "pro") return GEN_PAGE_PRO;
-  return GEN_PAGE_STANDARD; // standard
-}
+const TIERS = new Set<string>(["free", "standard", "pro", "premium", "admin"]);
 
 export async function getTier(env: Env, uid: string, email?: string): Promise<Tier> {
-  // An EXPLICIT tier row wins — including for the admin email. This lets the developer switch their
-  // OWN account to standard/pro to TEST plan behavior (forced-trim downgrade, the Standard limit,
-  // Pro cloud sync, retention) via the admin-only POST /api/sync/dev/tier, without a live
-  // subscription. In production the row is set by the RevenueCat webhook.
+  // An explicit tier row wins — including for the admin email, so the developer can switch their OWN
+  // account to any tier to TEST plan behavior (see POST /api/sync/dev/tier). Set by the webhook.
   const row = await env.DB.prepare("SELECT tier FROM users WHERE uid = ?")
     .bind(uid)
     .first<{ tier: string }>();
-  if (row?.tier === "standard" || row?.tier === "pro" || row?.tier === "admin") return row.tier;
-  // No explicit tier: the developer account (by verified email) is unlimited; everyone else is
-  // Standard (the safe, most-restrictive paid fallback until the webhook reports).
+  if (row?.tier && TIERS.has(row.tier)) return row.tier as Tier;
+  // No explicit tier: the developer account (by verified email) is admin; everyone else is Free
+  // (signed-in but no subscription = the free floor: 1 book, AI 1 page/mo).
   if (email && env.ADMIN_EMAIL && email.toLowerCase() === env.ADMIN_EMAIL.toLowerCase())
     return "admin";
-  return "standard";
+  return "free";
 }

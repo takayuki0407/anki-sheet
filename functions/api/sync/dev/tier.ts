@@ -6,6 +6,7 @@
 // safe even in production: no other account can change a tier. The chosen tier is stored in
 // users.tier and honored by getTier (an explicit row wins, even for the admin — see _lib/tier.ts).
 import { json, type Fn } from "../../../_lib/types";
+import { limitFor, type Tier } from "../../../_lib/tier";
 
 export const onRequestPost: Fn = async (ctx) => {
   const email = ctx.data.email;
@@ -21,8 +22,8 @@ export const onRequestPost: Fn = async (ctx) => {
   } catch {
     return json({ error: "bad_json" }, 400);
   }
-  const tier = body.tier;
-  if (tier !== "standard" && tier !== "pro" && tier !== "admin")
+  const tier = body.tier as Tier;
+  if (!["free", "standard", "pro", "premium", "admin"].includes(tier ?? ""))
     return json({ error: "bad_tier" }, 400);
 
   const now = Date.now();
@@ -33,16 +34,28 @@ export const onRequestPost: Fn = async (ctx) => {
   if (Object.prototype.hasOwnProperty.call(body, "downgradedAt")) {
     downgradedAt = body.downgradedAt === null ? null : Number(body.downgradedAt);
   } else {
-    downgradedAt = tier === "pro" ? null : now;
+    // Cloud-bearing tiers (pro/premium/admin) clear the retention clock; free/standard start it.
+    downgradedAt = tier === "pro" || tier === "premium" || tier === "admin" ? null : now;
   }
 
-  await ctx.env.DB.prepare(
-    `INSERT INTO users (uid, tier, updated_at, downgraded_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT(uid) DO UPDATE SET
-       tier = excluded.tier, updated_at = excluded.updated_at, downgraded_at = excluded.downgraded_at`,
+  // Also drive the downgrade-trim flow for testing: if the chosen tier's cap is below the account's
+  // active book count, require a trim (mirrors the webhook), so the admin can exercise the trim UI.
+  const cap = limitFor(tier);
+  const cntRow = await ctx.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM books WHERE uid = ? AND status = 'active'",
   )
-    .bind(ctx.data.uid, tier, now, downgradedAt)
+    .bind(ctx.data.uid)
+    .first<{ n: number }>();
+  const needsTrim = (cntRow?.n ?? 0) > cap;
+
+  await ctx.env.DB.prepare(
+    `INSERT INTO users (uid, tier, updated_at, downgraded_at, trim_required, cap) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(uid) DO UPDATE SET
+       tier = excluded.tier, updated_at = excluded.updated_at, downgraded_at = excluded.downgraded_at,
+       trim_required = excluded.trim_required, cap = excluded.cap`,
+  )
+    .bind(ctx.data.uid, tier, now, downgradedAt, needsTrim ? 1 : 0, cap)
     .run();
 
-  return json({ ok: true, tier, downgradedAt });
+  return json({ ok: true, tier, downgradedAt, trimRequired: needsTrim, cap });
 };
