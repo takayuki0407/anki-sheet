@@ -252,6 +252,9 @@ export function DeckList() {
                 freeSlotOnDelete={
                   cloudLoaded && !!v.deck.bookId && !cloudBlobIds.has(v.deck.bookId)
                 }
+                cloudBacked={
+                  cloudLoaded ? (v.deck.bookId ? cloudBlobIds.has(v.deck.bookId) : false) : null
+                }
               />
             ))}
           </div>
@@ -350,10 +353,14 @@ function DeckBook({
   deck,
   count,
   freeSlotOnDelete,
+  cloudBacked,
 }: {
   deck: DeckRow;
   count: number;
   freeSlotOnDelete: boolean;
+  /** true = the account has a cloud copy (size>0, restorable on re-Pro); false = device-only
+   * (delete = permanent); null = unknown (offline / not yet fetched → warn on the safe side). */
+  cloudBacked: boolean | null;
 }) {
   const setView = useApp((s) => s.setView);
   const cover = useCover(deck.id!);
@@ -366,12 +373,14 @@ function DeckBook({
     setView({ name: "viewer", deckId: deck.id! });
   };
   const onDelete = async () => {
-    if (
-      !confirm(
-        `「${deck.name}」をこの端末から削除しますか？\nクラウドに保存されている本は、あとで「クラウド」から取り込み直せます。`,
-      )
-    )
-      return;
+    // Branch the warning on whether the account has a cloud copy (size>0). Device-only books
+    // (size=0, or unknown/offline → safe side) are UNRECOVERABLE once deleted; cloud-backed books
+    // can be restored by returning to Pro and re-downloading.
+    const msg =
+      cloudBacked === true
+        ? `「${deck.name}」をこの端末から削除しますか？\nこの本はクラウドにバックアップがあります。Proに戻せば、あとで「クラウド」から取り込み直せます。`
+        : `「${deck.name}」をこの端末から削除しますか？\n⚠ この本は端末内だけにあります。削除すると復元できません。`;
+    if (!confirm(msg)) return;
     // Local-only delete: a book WITH a cloud blob is kept in the account (other devices keep it, this
     // device can re-download it). But a book with NO cloud blob (Standard, or an upload that never
     // finished) isn't stored anywhere — keeping its registry row would just leak a cap slot as an
@@ -410,7 +419,19 @@ function DeckBook({
       <div className="book-title" title={deck.name}>
         {deck.name}
       </div>
-      <div className="book-meta">{count} 個の暗記</div>
+      <div className="book-meta">
+        {count} 個の暗記
+        {cloudBacked === true && (
+          <span className="book-badge cloud" title="クラウドにバックアップあり（Proに戻せば復元可）">
+            ☁️ クラウドあり
+          </span>
+        )}
+        {cloudBacked === false && (
+          <span className="book-badge local" title="端末内のみ（削除すると復元できません）">
+            端末のみ
+          </span>
+        )}
+      </div>
       <div className="book-actions">
         <button className="btn ghost sm" onClick={() => setView({ name: "quiz", deckId: deck.id! })}>
           問題

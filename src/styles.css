@@ -220,6 +220,23 @@ body {
   color: var(--muted);
   margin-top: 1px;
 }
+.book-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.book-badge.cloud {
+  color: #2a6f97;
+  background: #e3f0f7;
+}
+.book-badge.local {
+  color: #9a6a00;
+  background: #fbf0d9;
+}
 .book-actions {
   display: flex;
   gap: 2px;
