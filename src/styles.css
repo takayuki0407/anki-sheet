@@ -1183,6 +1183,20 @@ body {
   border-color: #a93226;
   color: #fff;
 }
+/* Outlined destructive button: clearly a pressable button (visible border + card bg + red text),
+ * fills solid red on hover. For delete actions that sit next to a neutral button (e.g. the cloud
+ * section) so they read as a button, not as muted link text. */
+.btn.danger-outline {
+  background: var(--card);
+  border-color: #e0a99f;
+  color: #c0392b;
+  font-weight: 600;
+}
+.btn.danger-outline:hover {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
+}
 .danger-zone {
   margin-top: 14px;
   padding-top: 12px;

@@ -412,13 +412,13 @@ function CloudBook({
               {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
             </button>
           )}
-          <button className="btn sm ghost" onClick={removePermanent} disabled={busy}>
+          <button className="btn sm danger-outline" onClick={removePermanent} disabled={busy}>
             クラウドから完全に削除
           </button>
         </>
       ) : (
         <button
-          className="btn sm ghost"
+          className="btn sm danger-outline"
           onClick={release}
           disabled={busy}
           title={hasBlob ? "枠を空けます（クラウドに退避・Proで復元可）" : "枠を空けます（復元不可）"}
