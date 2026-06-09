@@ -64,6 +64,22 @@ function planLabel(tier?: string): string {
   }
 }
 
+// The AI ○× question monthly page allowance per tier (mirrors the server's genPageLimit).
+function aiQuotaLabel(tier?: string): string {
+  switch (tier) {
+    case "admin":
+      return "無制限";
+    case "premium":
+      return "月200ページ";
+    case "pro":
+      return "月30ページ";
+    case "standard":
+      return "月10ページ";
+    default:
+      return "月1ページ"; // free / signed-in default
+  }
+}
+
 export function Info() {
   const setView = useApp((s) => s.setView);
   const user = useAuth((s) => s.user);
@@ -292,6 +308,10 @@ export function Info() {
               <p>
                 現在のプラン：<strong>{planLabel(usage?.tier)}</strong>
               </p>
+              <p className="muted small">
+                AI ○×問題の生成：<strong>{aiQuotaLabel(usage?.tier)}</strong>
+                {usage && !usage.unlimited ? `／本は ${usage.limit} 冊まで` : "／本は無制限"}
+              </p>
               <div className="plan-compare">
                 <div className={`plan-col ${usage?.tier === "standard" ? "current" : ""}`}>
                   <h4>Standard</h4>
@@ -313,11 +333,15 @@ export function Info() {
                   </p>
                   <ul>
                     <li>本を無制限に取り込み</li>
-                    <li>クラウドストレージ 5GB</li>
-                    <li>全ての端末・プラットフォームで進捗同期</li>
+                    <li>クラウド保存・全端末で同期</li>
+                    <li>AI ○×問題：月30ページ</li>
                   </ul>
                 </div>
               </div>
+              <p className="muted small">
+                無料の <strong>Free</strong>（本1冊・AI 月1ページ）はサインインだけで使えます。
+                <strong>Premium</strong>（近日）は Pro に適応SRS復習を追加します。
+              </p>
               {usage?.tier === "admin" ? (
                 <p className="muted small">
                   管理者アカウントのため、すべての機能を無制限でご利用いただけます。
