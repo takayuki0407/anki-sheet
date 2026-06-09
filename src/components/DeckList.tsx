@@ -195,17 +195,16 @@ export function DeckList() {
   }, [user]);
 
   const localIds = new Set(((decks ?? []).map((d) => d.bookId).filter(Boolean) as string[]));
-  const me = deviceLabel();
-  // Cloud section = ACTIVE account books not on this device (retained/trimmed are never offered).
-  //  • Pro+ (sync): every active book not held locally — incl. zero-holder ones (downloadable/restore).
-  //  • Standard/Free (non-sync): ONLY books held by ANOTHER device (`device` set, ≠ me), size-agnostic
-  //    — so a size=0 device-only book can be cleared from here to free the slot. Zero-holder/retained
-  //    books are NOT shown (nothing to download, and they're managed from the bookshelf).
+  // Cloud section = every ACTIVE account book NOT on this device (retained/trimmed are never offered),
+  // for BOTH tiers — including zero-holder books (`device == null`, e.g. a Pro local-delete that left
+  // it cloud-only, or a failed trim download). Those aren't on any bookshelf, so the cloud section is
+  // the ONLY place to free their account slot on a non-sync tier; gating on `device` would strand them.
+  // A self-deleted book never flashes here: a bookshelf delete retains it (→ non-active) AND drops it
+  // from `cloud` immediately (removeFromCloud). Download stays Pro-only + size>0 (see CloudBook).
   const remote = (cloud ?? []).filter((b) => {
     if ((b.status ?? "active") !== "active") return false;
     if (localIds.has(b.book_id)) return false;
-    if (cloudPro) return true;
-    return !!b.device && b.device !== me;
+    return true;
   });
   // Books the account has a downloadable cloud blob for (size>0). A LOCAL delete of a book with NO
   // cloud blob must ALSO free its account slot — otherwise it lingers as a phantom row that counts
@@ -310,7 +309,7 @@ export function DeckList() {
           <p className="muted small">
             {cloudPro
               ? "同じアカウントの本です。「この端末に取り込む」で追加、「クラウドから完全に削除」ですべての端末から削除します。"
-              : "他の端末にある本です。各本の「…から削除（枠を空ける）」で、この端末のアカウント枠を空けられます。クラウド保存がある本はProに戻すと復元できますが、ない本（端末のみ）は復元できません。"}
+              : "同じアカウントの、この端末にない本です。各本の「…枠を空ける」でアカウントの枠を解放できます。クラウド保存がある本はProに戻すと復元できますが、ない本は復元できません。"}
           </p>
           <ul className="cloud-list">
             {remote.map((b) => (
@@ -378,14 +377,15 @@ function CloudBook({
       setBusy(false);
     }
   };
-  // Standard/Free : single action — free the account slot another device is holding. size>0 → retain
-  // (frees the slot, keeps R2 for re-Pro restore); size=0 → unregister (permanent). Always confirm,
-  // and warn harder when there's no cloud copy to restore from.
+  // Standard/Free : single action — free the account slot. size>0 → retain (frees the slot, keeps R2
+  // for re-Pro restore); size=0 → unregister (permanent). Wording adapts to whether a holder device is
+  // known (another device) or not (zero-holder, cloud-only). Always confirm; warn harder with no copy.
   const release = async () => {
-    const where = holder ? `「${holder}」` : "別の端末";
-    const msg = hasBlob
-      ? `${where}に保存中の「${title}」を削除して枠を空けますか？\nProに戻すと復元できます（保持〜約6ヶ月）。`
-      : `${where}に保存中の「${title}」を削除して枠を空けますか？\n⚠ クラウドに保存がないため、削除すると復元できません。`;
+    const msg = !hasBlob
+      ? `「${title}」を削除して枠を空けますか？\n⚠ クラウドに保存がないため、削除すると復元できません。`
+      : holder
+        ? `「${holder}」に保存中の「${title}」を枠から外しますか？\nクラウドに退避し、Proに戻すと復元できます（保持〜約6ヶ月）。`
+        : `「${title}」をクラウドから外して枠を空けますか？\nProに戻すと復元できます（保持〜約6ヶ月）。`;
     if (!confirm(msg)) return;
     setBusy(true);
     setErrMsg(null);
@@ -404,7 +404,9 @@ function CloudBook({
       <span className={`cloud-badge ${hasBlob ? "ok" : "warn"}`}>
         {hasBlob ? "☁️ クラウドあり" : "端末のみ（復元不可）"}
       </span>
-      <span className="cloud-device">{holder ? `「${holder}」に保存` : "クラウドのみ"}</span>
+      <span className="cloud-device">
+        {holder ? `「${holder}」に保存` : "クラウドのみ（端末未保存）"}
+      </span>
       {canDownload ? (
         <>
           {hasBlob && (
@@ -423,7 +425,7 @@ function CloudBook({
           disabled={busy}
           title={hasBlob ? "枠を空けます（クラウドに退避・Proで復元可）" : "枠を空けます（復元不可）"}
         >
-          {holder ? `「${holder}」から削除（枠を空ける）` : "削除して枠を空ける"}
+          {holder ? `「${holder}」から削除（枠を空ける）` : "クラウドから外す（枠を空ける）"}
         </button>
       )}
       {errMsg && <p className="cloud-error">{errMsg}</p>}
