@@ -16,6 +16,7 @@ import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
 import {
   listBooks,
+  retainBook,
   syncErrorMessage,
   unregisterBook,
   updateBookMeta,
@@ -268,6 +269,7 @@ export function DeckList() {
                 cloudDevice={
                   (v.deck.bookId && cloud?.find((b) => b.book_id === v.deck.bookId)?.device) || null
                 }
+                nonSync={cloudLoaded && !cloudPro}
               />
             ))}
           </div>
@@ -342,6 +344,19 @@ function CloudBook({
       setBusy(false);
     }
   };
+  // Non-destructive release for a cloud-only active book on a non-sync tier: retain it (frees the
+  // slot, keeps R2 for re-Pro restore) instead of permanently deleting.
+  const retain = async () => {
+    setBusy(true);
+    setErrMsg(null);
+    try {
+      await retainBook(book.book_id);
+      onRemoved(book.book_id);
+    } catch (e) {
+      setErrMsg(syncErrorMessage(e));
+      setBusy(false);
+    }
+  };
   // Download needs a cloud blob (size>0) AND a tier that can restore (Pro+). size=0 = no cloud copy
   // (other-device-only / never uploaded). Either way「クラウドから削除」frees the account slot.
   const hasBlob = book.size > 0;
@@ -354,6 +369,16 @@ function CloudBook({
       {hasBlob && canDownload && (
         <button className="btn sm" onClick={download} disabled={busy}>
           {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
+        </button>
+      )}
+      {hasBlob && !canDownload && (
+        <button
+          className="btn sm ghost"
+          onClick={retain}
+          disabled={busy}
+          title="枠を空けます（クラウドに退避・Proで復元可）"
+        >
+          枠から外す
         </button>
       )}
       <button className="btn sm ghost" onClick={remove} disabled={busy}>
@@ -370,6 +395,7 @@ function DeckBook({
   freeSlotOnDelete,
   cloudBacked,
   cloudDevice,
+  nonSync,
 }: {
   deck: DeckRow;
   count: number;
@@ -379,6 +405,9 @@ function DeckBook({
   cloudBacked: boolean | null;
   /** The account book's current holder name, or null (no holder / unknown). */
   cloudDevice: string | null;
+  /** true = a known NON-sync tier (Standard/Free): a cloud-backed local delete RETAINS the book
+   * (frees the slot, keeps R2) instead of leaving a stuck cloud-only active row. */
+  nonSync: boolean;
 }) {
   const setView = useApp((s) => s.setView);
   const cover = useCover(deck.id!);
@@ -391,26 +420,29 @@ function DeckBook({
     setView({ name: "viewer", deckId: deck.id! });
   };
   const onDelete = async () => {
-    // Branch the warning on whether the account has a cloud copy (size>0). Device-only books
-    // (size=0, or unknown/offline → safe side) are UNRECOVERABLE once deleted; cloud-backed books
-    // can be restored by returning to Pro and re-downloading.
+    // Branch the warning on cloud-copy + tier: device-only (size=0/unknown) = permanent; cloud-backed
+    // on a non-sync tier = retained (frees a slot, re-Pro restorable); cloud-backed on Pro = kept.
     const msg =
-      cloudBacked === true
-        ? `「${deck.name}」をこの端末から削除しますか？\nこの本はクラウドにバックアップがあります。Proに戻せば、あとで「クラウド」から取り込み直せます。`
-        : `「${deck.name}」をこの端末から削除しますか？\n⚠ この本は端末内だけにあります。削除すると復元できません。`;
+      cloudBacked !== true
+        ? `「${deck.name}」をこの端末から削除しますか？\n⚠ この本は端末内だけにあります。削除すると復元できません。`
+        : nonSync
+          ? `「${deck.name}」をこの端末から削除しますか？\nこの端末から削除し、クラウドに退避します（枠が空きます）。Proに戻すと復元できます（保持〜約6ヶ月）。`
+          : `「${deck.name}」をこの端末から削除しますか？\nこの本はクラウドにバックアップがあります。Proに戻せば、あとで「クラウド」から取り込み直せます。`;
     if (!confirm(msg)) return;
-    // Local-only delete: a book WITH a cloud blob is kept in the account (other devices keep it, this
-    // device can re-download it). But a book with NO cloud blob (Standard, or an upload that never
-    // finished) isn't stored anywhere — keeping its registry row would just leak a cap slot as an
-    // unrecoverable phantom, so we unregister it too (frees the slot for the whole account).
+    // Local delete. size=0 (no cloud copy) → unregister (permanent, frees the slot). size>0 on a
+    // non-sync tier → retain (active→retained: frees the slot, keeps R2, restorable on re-Pro).
+    // size>0 on Pro+ → keep active (re-download possible; just release the holder if we held it).
     await deleteDeck(deck.id!);
     if (deck.bookId) {
       void deleteBookQuestions(deck.bookId).catch(() => {}); // drop this device's AI questions
       if (freeSlotOnDelete) {
-        void unregisterBook(deck.bookId).catch(() => {});
+        void unregisterBook(deck.bookId).catch(() => {}); // size=0 → permanent, frees the slot
+      } else if (cloudBacked === true && nonSync) {
+        // Standard/Free: retain (active→retained) — frees the slot, keeps R2 for re-Pro restore.
+        void retainBook(deck.bookId).catch(() => {});
       } else if (cloudBacked === true && cloudDevice === deviceLabel()) {
-        // We were the holder of this cloud-backed book; releasing it → no device holds it now (the
-        // book becomes "cloud-only"). Clear the holder so the bookshelf stops showing this device.
+        // Pro+ holder: keep the book active (re-downloadable); just release the holder so the
+        // bookshelf stops showing this device ("cloud-only").
         void updateBookMeta(deck.bookId, { device: null }).catch(() => {});
       }
     }
