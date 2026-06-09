@@ -81,7 +81,10 @@ async function purgeExpired(env: Env): Promise<void> {
     // 2) Mark the account's books as cloud-cleared: the slot rows remain (the account still "knows"
     //    about the books), but the file is gone, so the bookshelf won't offer a cloud download.
     await env.DB.prepare("UPDATE books SET size = 0, r2_key = NULL WHERE uid = ?").bind(uid).run();
-    // 3) Stop the clock so we don't re-scan this account every day. A future Pro→downgrade cycle
+    // 3) Purge the account's AI-generated questions too (the books are cloud-cleared and the account
+    //    is non-Pro, so synced questions would just be orphaned rows). §4.3.
+    await env.DB.prepare("DELETE FROM questions WHERE uid = ?").bind(uid).run();
+    // 4) Stop the clock so we don't re-scan this account every day. A future Pro→downgrade cycle
     //    sets a fresh downgraded_at via the webhook.
     await env.DB.prepare("UPDATE users SET downgraded_at = NULL WHERE uid = ?").bind(uid).run();
   }

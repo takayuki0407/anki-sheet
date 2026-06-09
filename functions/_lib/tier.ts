@@ -46,6 +46,22 @@ export function genPageLimit(t: Tier): number {
   }
 }
 
+/** Monthly AI budget accounting for the 7-day trial (§1.4): while the trial is active the budget is
+ * capped at TRIAL_GEN_PAGES regardless of the (trial) tier — so a Premium trial can't hand out 200
+ * pages. `trialUntil` is the trial expiry (epoch ms; 0 = not in a trial). */
+export function genLimitDuringTrial(t: Tier, trialUntil: number, now: number): number {
+  const base = genPageLimit(t);
+  return trialUntil > now ? Math.min(base, TRIAL_GEN_PAGES) : base;
+}
+
+/** Trial expiry (epoch ms) for an account, or 0 when not in a trial. Set by the RevenueCat webhook. */
+export async function getTrialUntil(env: Env, uid: string): Promise<number> {
+  const row = await env.DB.prepare("SELECT trial_until FROM users WHERE uid = ?")
+    .bind(uid)
+    .first<{ trial_until: number }>();
+  return Number(row?.trial_until) || 0;
+}
+
 const TIERS = new Set<string>(["free", "standard", "pro", "premium", "admin"]);
 
 export async function getTier(env: Env, uid: string, email?: string): Promise<Tier> {

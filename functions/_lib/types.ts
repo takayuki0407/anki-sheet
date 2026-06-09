@@ -6,6 +6,9 @@
 export interface D1Result<T> {
   results: T[];
   success: boolean;
+  /** Cloudflare populates meta.changes with the number of rows written — used to detect whether a
+   * conditional UPSERT (`... WHERE count < limit`) actually reserved a slot. */
+  meta?: { changes?: number };
 }
 export interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement;

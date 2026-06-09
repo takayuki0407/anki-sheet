@@ -8,7 +8,13 @@
 // Pro+ questions are stored in D1 (synced + the re-display cache); Standard questions are returned
 // only and kept LOCAL by the client (this endpoint never persists Standard rows).
 import { json, type Fn } from "../../_lib/types";
-import { genPageLimit, getTier, isUnlimited, type Tier } from "../../_lib/tier";
+import {
+  genLimitDuringTrial,
+  getTier,
+  getTrialUntil,
+  isUnlimited,
+  type Tier,
+} from "../../_lib/tier";
 
 const HARD_MAX = 6;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -132,7 +138,7 @@ async function callHaiku(apiKey: string, userMessage: string): Promise<RawQ[]> {
 export const onRequestGet: Fn = async (ctx) => {
   const uid = ctx.data.uid!;
   const tier = await getTier(ctx.env, uid, ctx.data.email);
-  const limit = genPageLimit(tier);
+  const limit = genLimitDuringTrial(tier, await getTrialUntil(ctx.env, uid), Date.now());
   const row = await ctx.env.DB.prepare(
     "SELECT count FROM generation_usage WHERE uid = ? AND period = ?",
   )
@@ -193,25 +199,42 @@ export const onRequestPost: Fn = async (ctx) => {
     if (cached.results.length) return json({ questions: cached.results, cached: true });
   }
 
-  // Quota check (server-authoritative).
-  const limit = genPageLimit(tier);
+  // Quota (server-authoritative). During the 7-day trial the budget is capped (§1.4). RESERVE a slot
+  // atomically BEFORE the API call (conditional +1) so concurrent requests can't double-spend the
+  // monthly budget; a failed/empty generation refunds the slot below (we eat the API cost, not the
+  // user's quota).
+  const limit = genLimitDuringTrial(tier, await getTrialUntil(ctx.env, uid), Date.now());
   const p = period();
-  const usedRow = await ctx.env.DB.prepare(
-    "SELECT count FROM generation_usage WHERE uid = ? AND period = ?",
+  const reserve = await ctx.env.DB.prepare(
+    `INSERT INTO generation_usage (uid, period, count) VALUES (?, ?, 1)
+     ON CONFLICT(uid, period) DO UPDATE SET count = count + 1 WHERE generation_usage.count < ?`,
   )
-    .bind(uid, p)
-    .first<{ count: number }>();
-  const used = usedRow?.count ?? 0;
-  if (used >= limit) return json({ error: "quota_exceeded", count: used, limit }, 402);
+    .bind(uid, p, limit)
+    .run();
+  if ((reserve.meta?.changes ?? 0) === 0) {
+    const usedRow = await ctx.env.DB.prepare(
+      "SELECT count FROM generation_usage WHERE uid = ? AND period = ?",
+    )
+      .bind(uid, p)
+      .first<{ count: number }>();
+    return json({ error: "quota_exceeded", count: usedRow?.count ?? limit, limit }, 402);
+  }
+  const refund = () =>
+    ctx.env.DB.prepare(
+      "UPDATE generation_usage SET count = count - 1 WHERE uid = ? AND period = ? AND count > 0",
+    )
+      .bind(uid, p)
+      .run();
 
   const maxN = DENSITY_MAX[body.density ?? "auto"] ?? HARD_MAX;
   const userMessage = buildUserMessage(body.subjectHint ?? "", maxN, body.pageText, terms);
 
-  // Generate. A failed/garbage generation does NOT consume the user's quota (we eat the API cost).
+  // Generate. A failed/garbage generation refunds the reserved slot (the user isn't charged quota).
   let raw: RawQ[];
   try {
     raw = await callHaiku(ctx.env.ANTHROPIC_API_KEY, userMessage);
   } catch (e) {
+    await refund();
     return json({ error: "ai_failed", detail: e instanceof Error ? e.message : String(e) }, 502);
   }
   const valid: OutQ[] = raw
@@ -231,14 +254,11 @@ export const onRequestPost: Fn = async (ctx) => {
       explanation: typeof q.explanation === "string" ? q.explanation : "",
       source: typeof q.source === "string" ? q.source : "",
     }));
-  if (!valid.length) return json({ error: "empty_generation" }, 422);
-
-  // Count this successful generation atomically (concurrent calls can't double-spend a slot).
-  await ctx.env.DB.prepare(
-    "INSERT INTO generation_usage (uid, period, count) VALUES (?, ?, 1) ON CONFLICT(uid, period) DO UPDATE SET count = count + 1",
-  )
-    .bind(uid, p)
-    .run();
+  if (!valid.length) {
+    await refund();
+    return json({ error: "empty_generation" }, 422);
+  }
+  // (The slot was already reserved atomically above; no second increment.)
 
   // Pro+: replace this page's stored set (delete + insert in one batch). Standard: return only.
   if (isProPlus) {
@@ -255,10 +275,12 @@ export const onRequestPost: Fn = async (ctx) => {
     ]);
   }
 
-  return json({
-    questions: valid,
-    count: used + 1,
-    limit,
-    remaining: Math.max(0, limit - used - 1),
-  });
+  // Read back the reserved count for an accurate remaining (the slot was incremented up-front).
+  const nowRow = await ctx.env.DB.prepare(
+    "SELECT count FROM generation_usage WHERE uid = ? AND period = ?",
+  )
+    .bind(uid, p)
+    .first<{ count: number }>();
+  const count = nowRow?.count ?? limit;
+  return json({ questions: valid, count, limit, remaining: Math.max(0, limit - count) });
 };
