@@ -673,7 +673,10 @@ export function PageViewer({ deckId }: { deckId: number }) {
         <button className="btn ghost sm" onClick={() => setTocOpen(true)}>
           目次
         </button>
-        <button className="btn ghost sm" onClick={() => setView({ name: "quiz", deckId })}>
+        <button
+          className="btn ghost sm"
+          onClick={() => setView({ name: "quiz", deckId, from: { name: "viewer", deckId } })}
+        >
           問題
         </button>
         <span className="book-title-bar" title={deckName}>

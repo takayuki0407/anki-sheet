@@ -6,7 +6,9 @@ export type View =
   | { name: "import" }
   | { name: "viewer"; deckId: number }
   | { name: "settings"; deckId: number }
-  | { name: "quiz"; deckId: number }
+  // `from` remembers where quiz was opened from so its back button returns there (opened from the
+  // viewer → back to the book, not the bookshelf). In-memory only (not in the URL); defaults to decks.
+  | { name: "quiz"; deckId: number; from?: View }
   | { name: "info" }
   | { name: "login" }
   | { name: "pricing" }

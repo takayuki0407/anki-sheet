@@ -103,7 +103,7 @@ export function App() {
             {view.name === "import" && <ImportWizard />}
             {view.name === "viewer" && <PageViewer deckId={view.deckId} />}
             {view.name === "settings" && <Settings deckId={view.deckId} />}
-            {view.name === "quiz" && <QuizScreen deckId={view.deckId} />}
+            {view.name === "quiz" && <QuizScreen deckId={view.deckId} from={view.from} />}
             {view.name === "info" && <Info />}
             {view.name === "login" && <Login />}
           </>

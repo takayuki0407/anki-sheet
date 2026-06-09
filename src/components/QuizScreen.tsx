@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useLiveQuery } from "dexie-react-hooks";
-import { useApp } from "../store/session";
+import { useApp, type View } from "../store/session";
 import { useAuth } from "../auth/useAuth";
 import { deckCards, getBookQuestions, getDeck, getDeckPdf } from "../db/repo";
 import { getPageText, loadPdf, renderPageImage } from "../pdf/pdfEngine";
@@ -29,7 +29,7 @@ const DENSITY_LABELS: { key: Density; label: string }[] = [
   { key: "many", label: "多め" },
 ];
 
-export function QuizScreen({ deckId }: { deckId: number }) {
+export function QuizScreen({ deckId, from }: { deckId: number; from?: View }) {
   const setView = useApp((s) => s.setView);
   const user = useAuth((s) => s.user);
   const [deck, setDeck] = useState<DeckRow | null>(null);
@@ -99,8 +99,8 @@ export function QuizScreen({ deckId }: { deckId: number }) {
   return (
     <div className="panel quiz">
       <div className="panel-head">
-        <button className="btn ghost" onClick={() => setView({ name: "decks" })}>
-          ← 本棚
+        <button className="btn ghost" onClick={() => setView(from ?? { name: "decks" })}>
+          ← 戻る
         </button>
         <h2>AI問題 — {deck?.name ?? "…"}</h2>
       </div>
