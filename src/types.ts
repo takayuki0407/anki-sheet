@@ -43,6 +43,9 @@ export interface DetectedCloze {
   bbox: Rect;
   /** Recovered answer text when available (pdf.js + cMaps); may be empty. */
   text: string;
+  /** Cloze LWW timestamp (P0-2). Set on sync-materialize to PRESERVE the merged `t`; for a fresh
+   * manual add / re-detect it's absent and the card's createdAt is stamped "now" instead. */
+  t?: number;
 }
 
 // ---- Dexie row types (all dates are epoch-ms numbers) ----
@@ -81,6 +84,9 @@ export interface DeckRow {
   progressAt?: number;
   /** When the deck CONTENT (masks/name/color) was last changed locally — content last-write-wins. */
   contentAt?: number;
+  /** Tombstones for DELETED masks (clozeKey -> delete time), so a mask removed on one device isn't
+   * resurrected by another's set on merge (P0-2). The live masks are the cards (t = createdAt). */
+  clozeTomb?: Record<string, number>;
 }
 
 export interface PdfRow {

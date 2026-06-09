@@ -32,7 +32,7 @@ import {
   addBm,
 } from "../sync/progressMerge";
 import { refreshContent, uploadContent } from "../sync/deck";
-import { cardKeyMaps as cardKeyMapsFlat } from "../sync/cardKeys";
+import { cardKey, cardKeyMaps as cardKeyMapsFlat } from "../sync/cardKeys";
 import type { BookmarkRow, CardRow, PdfRow, Rect } from "../types";
 
 type Status = "loading" | "ready" | "error";
@@ -620,10 +620,20 @@ export function PageViewer({ deckId }: { deckId: number }) {
   };
   const saveEdit = async () => {
     if (pdf?.id != null) {
-      for (const id of editDels) await deleteCard(id);
-      for (const a of editAdds) await addCard(deckId, pdf.id, a.pageIndex, a.rect);
-      // Pro: re-sync the content JSON so added/removed masks reach the user's other devices
-      // (best-effort, fail-open; the PDF is unchanged so no blob re-upload).
+      const now = Date.now();
+      const tomb: Record<string, number> = { ...((await getDeck(deckId))?.clozeTomb ?? {}) };
+      for (const id of editDels) {
+        const c = (allCards ?? []).find((x) => x.id === id);
+        if (c) tomb[cardKey(c.pageIndex, c.answerRect)] = now; // tombstone the deleted mask (P0-2)
+        await deleteCard(id);
+      }
+      for (const a of editAdds) {
+        delete tomb[cardKey(a.pageIndex, a.rect)]; // a re-added position is live again
+        await addCard(deckId, pdf.id, a.pageIndex, a.rect);
+      }
+      await updateDeck(deckId, { clozeTomb: tomb, contentAt: now });
+      // Pro: re-sync the content JSON so added/removed masks reach the user's other devices (the
+      // server merges per-key, so this never clobbers another device's edits). Best-effort.
       if (useAuth.getState().user) {
         const d = await getDeck(deckId);
         if (d?.bookId) void uploadContent(d.bookId, deckId).catch(() => {});

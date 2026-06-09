@@ -39,7 +39,9 @@ function clozesToCards(
     rects: cz.rects,
     answerRect: cz.bbox,
     text: cz.text,
-    createdAt: now,
+    // createdAt doubles as the cloze's LWW timestamp (P0-2): a sync-materialize passes the merged `t`
+    // to preserve it; a fresh manual add / re-detect leaves it unset and stamps "now".
+    createdAt: cz.t ?? now,
   }));
 }
 
@@ -111,9 +113,57 @@ export async function updateDeck(deckId: number, patch: Partial<DeckRow>): Promi
   await db.decks.update(deckId, patch);
 }
 
-/** Re-run detection for a deck under a new color config: replace all its answers. Re-detection makes
- * NEW card ids (and may change which/where answers are), so ★・revealed (stored as local card ids)
- * are carried over to the replaced cards by geometric overlap; unmatched answers are dropped (§4.4). */
+/** Replace a deck's cards with `clozes` and carry ★/revealed over to the new cards by geometric
+ * overlap (re-detection makes NEW ids and may move answers; §4.4). Runs INSIDE an open rw
+ * transaction; returns the ★ patch for the caller's deck.update + the old/new cloze key sets. */
+async function replaceCardsCarryStars(
+  deckId: number,
+  pdfId: number,
+  deck: DeckRow | undefined,
+  clozes: DetectedCloze[],
+  now: number,
+): Promise<{
+  count: number;
+  oldKeys: Set<string>;
+  newKeys: Set<string>;
+  patch: Pick<DeckRow, "starred" | "revealed" | "starsLww">;
+}> {
+  const oldCards = await db.cards.where("deckId").equals(deckId).toArray();
+  await db.cards.where("deckId").equals(deckId).delete();
+  const cards = clozesToCards(clozes, deckId, pdfId, now);
+  const newIds: number[] = [];
+  for (let i = 0; i < cards.length; i += 500) {
+    const keys = await db.cards.bulkAdd(cards.slice(i, i + 500), { allKeys: true });
+    newIds.push(...(keys as number[]));
+  }
+  const newCards = cards.map((c, i) => ({
+    id: newIds[i],
+    pageIndex: c.pageIndex,
+    answerRect: c.answerRect,
+  }));
+  const corr = correspondCards(oldCards, newCards);
+  const remap = (ids?: number[]) =>
+    (ids ?? []).map((id) => corr.get(id)).filter((x): x is number => x != null);
+  const newStarred = remap(deck?.starred);
+  const newRevealed = remap(deck?.revealed);
+  // Re-anchor the ★ LWW map to the carried-over stars' position keys (stale keys -> inert tombstones).
+  const byId = new Map(newCards.map((c) => [c.id, c] as const));
+  const starMap: StarMap = { ...(deck?.starsLww ?? {}) };
+  setActiveStars(
+    starMap,
+    newStarred.map((id) => cardKey(byId.get(id)!.pageIndex, byId.get(id)!.answerRect)),
+    now,
+  );
+  return {
+    count: cards.length,
+    oldKeys: new Set(oldCards.map((c) => cardKey(c.pageIndex, c.answerRect))),
+    newKeys: new Set(newCards.map((c) => cardKey(c.pageIndex, c.answerRect))),
+    patch: { starred: newStarred, revealed: newRevealed, starsLww: starMap },
+  };
+}
+
+/** Re-run detection for a deck under a new color config: replace all its answers (carrying ★ over),
+ * and tombstone the masks the re-detect removed so the deletion propagates cross-device (P0-2/§4.4). */
 export async function redetectDeck(
   deckId: number,
   color: DeckColorConfig,
@@ -124,42 +174,30 @@ export async function redetectDeck(
     const pdf = await db.pdfs.where("deckId").equals(deckId).first();
     if (!pdf?.id) throw new Error("PDFが見つかりません");
     const deck = await db.decks.get(deckId);
-    const oldCards = await db.cards.where("deckId").equals(deckId).toArray(); // snapshot for carry-over
-    await db.cards.where("deckId").equals(deckId).delete();
-    const cards = clozesToCards(clozes, deckId, pdf.id, now);
-    const newIds: number[] = [];
-    for (let i = 0; i < cards.length; i += 500) {
-      const keys = await db.cards.bulkAdd(cards.slice(i, i + 500), { allKeys: true });
-      newIds.push(...(keys as number[]));
-    }
-    const newCards = cards.map((c, i) => ({
-      id: newIds[i],
-      pageIndex: c.pageIndex,
-      answerRect: c.answerRect,
-    }));
-    // Carry ★/revealed (local ids) over to the new cards by overlap; drop answers that vanished.
-    const corr = correspondCards(oldCards, newCards);
-    const remap = (ids?: number[]) =>
-      (ids ?? []).map((id) => corr.get(id)).filter((x): x is number => x != null);
-    const newStarred = remap(deck?.starred);
-    const newRevealed = remap(deck?.revealed);
-    // Re-anchor the ★ LWW map to the carried-over stars' position keys. No-op when the detection is
-    // unchanged; when answers moved, the stale (old-position) keys are tombstoned — inert, since no
-    // card sits at the old position — and the surviving stars take their new keys.
-    const byId = new Map(newCards.map((c) => [c.id, c] as const));
-    const starMap: StarMap = { ...(deck?.starsLww ?? {}) };
-    setActiveStars(
-      starMap,
-      newStarred.map((id) => cardKey(byId.get(id)!.pageIndex, byId.get(id)!.answerRect)),
-      now,
-    );
-    await db.decks.update(deckId, {
-      color,
-      starred: newStarred,
-      revealed: newRevealed,
-      starsLww: starMap,
-    });
-    return cards.length;
+    const r = await replaceCardsCarryStars(deckId, pdf.id, deck, clozes, now);
+    const tomb: Record<string, number> = { ...(deck?.clozeTomb ?? {}) };
+    for (const k of r.oldKeys) if (!r.newKeys.has(k)) tomb[k] = now; // removed -> tombstone
+    for (const k of r.newKeys) delete tomb[k]; // re-detected position is live again
+    await db.decks.update(deckId, { color, ...r.patch, clozeTomb: tomb });
+    return r.count;
+  });
+}
+
+/** Materialize the server-MERGED mask set (P0-2): replace cards with the active clozes (preserving
+ * their merged `t` via cloze.t) and adopt the merged tombstones. Used by refreshContent. */
+export async function materializeContent(
+  deckId: number,
+  color: DeckColorConfig,
+  active: DetectedCloze[],
+  tombs: Record<string, number>,
+): Promise<void> {
+  const now = Date.now();
+  await db.transaction("rw", db.decks, db.pdfs, db.cards, async () => {
+    const pdf = await db.pdfs.where("deckId").equals(deckId).first();
+    if (!pdf?.id) throw new Error("PDFが見つかりません");
+    const deck = await db.decks.get(deckId);
+    const r = await replaceCardsCarryStars(deckId, pdf.id, deck, active, now);
+    await db.decks.update(deckId, { color, ...r.patch, clozeTomb: tombs });
   });
 }
 

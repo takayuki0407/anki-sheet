@@ -4,10 +4,12 @@ import {
   activeClozes,
   addCloze,
   clozeKey,
+  clozeMapFromCards,
   mergeContent,
   normalizeContent,
   removeCloze,
   setActiveClozes,
+  tombstonesOf,
   type Cloze,
   type ClozeMap,
   type ContentBlob,
@@ -87,6 +89,23 @@ describe("setActiveClozes (re-detect reconcile)", () => {
       .map((c) => clozeKey(c.pageIndex, c.bbox))
       .sort();
     expect(live).toEqual(["0:100:0", "0:300:0"]);
+  });
+});
+
+describe("clozeMapFromCards + tombstonesOf (client derive)", () => {
+  it("builds live entries from cards (t=createdAt) and folds tombstones; tombstone wins when newer", () => {
+    const cards = [
+      { pageIndex: 0, rects: [bx(0, 100)], bbox: bx(0, 100), text: "a", t: 5 },
+      { pageIndex: 0, rects: [bx(0, 200)], bbox: bx(0, 200), text: "b", t: 5 },
+    ];
+    const map = clozeMapFromCards(cards, { "0:200:0": 9 }); // 200 deleted after it was added
+    expect(activeClozes({ clozesLww: map }).map((c) => clozeKey(c.pageIndex, c.bbox))).toEqual([
+      "0:100:0",
+    ]);
+    expect(tombstonesOf(map)).toEqual({ "0:200:0": 9 });
+    // A re-add (card t newer than the tombstone) makes it live again:
+    const map2 = clozeMapFromCards([{ ...cards[1], t: 12 }], { "0:200:0": 9 });
+    expect(activeClozes({ clozesLww: map2 })).toHaveLength(1);
   });
 });
 
