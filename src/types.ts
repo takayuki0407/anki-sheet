@@ -66,6 +66,11 @@ export interface DeckRow {
   revealed?: number[];
   /** Starred answers (card ids) — review-only mode hides just these. */
   starred?: number[];
+  /** ★ as an LWW-element-set (portable key -> {t,d}) — per-key tombstone merge for cross-device
+   * sync (改修案 §4.2). Non-indexed JSON; the `starred` ids above are the derived live set. */
+  starsLww?: import("./sync/progressMerge").StarMap;
+  /** しおり as an LWW-element-set (bmKey -> {t,d,title,pageIndex}); the bookmarks table is derived. */
+  bmLww?: import("./sync/progressMerge").BmMap;
   /** Legacy red-sheet on/off (superseded by redMode; kept for back-compat on load). */
   sheetOn?: boolean;
   /** Red overlay mode last used: 赤マスク / 赤シート / OFF. */

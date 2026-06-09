@@ -3,6 +3,7 @@
 // token authenticates each call; the Worker maps it to the account uid.
 import { getIdToken } from "../auth/useAuth";
 import { deviceLabel } from "./device";
+import type { ProgressBlob } from "./progressMerge";
 
 const BASE = "/api/sync";
 
@@ -179,17 +180,11 @@ export async function getContent(bookId: string): Promise<unknown> {
 // `revealedKeys` are device-portable "pageIndex:ordinal" keys (NOT local card ids, which differ
 // per device) — the ordinal is the card's position-sorted index on its page, identical across
 // devices for the same detected book, so revealed answers map correctly.
-export interface ProgressData {
-  lastPage?: number;
-  lastMode?: "scroll" | "paged";
-  redMode?: "mask" | "sheet" | "off";
-  sheetBand?: { top: number; height: number };
-  revealedKeys?: string[];
-  /** Starred answers as portable keys (★ review) — synced cross-device like revealedKeys. */
-  starredKeys?: string[];
-  /** User bookmarks (しおり) — device-independent, synced cross-device (last-write-wins). */
-  bookmarks?: { title: string; pageIndex: number }[];
-}
+//
+// The wire shape IS the merge blob: position fields + ★/しおり element-sets (starsLww/bmLww) with
+// per-key tombstones. The server merges per-key on PUT (改修案 §4.2); legacy starredKeys/bookmarks
+// arrays are still accepted/folded for old clients.
+export type ProgressData = ProgressBlob;
 
 export async function getProgress(
   bookId: string,

@@ -20,6 +20,17 @@ import { ContinuousView } from "./ContinuousView";
 import { useApp } from "../store/session";
 import { useAuth } from "../auth/useAuth";
 import { getProgress, putProgress } from "../sync/api";
+import {
+  type StarMap,
+  type BmMap,
+  normalize,
+  mergeBlobs,
+  activeStarKeys,
+  activeBookmarks,
+  setActiveStars,
+  setActiveBookmarks,
+  addBm,
+} from "../sync/progressMerge";
 import { refreshContent, uploadContent } from "../sync/deck";
 import type { BookmarkRow, CardRow, PdfRow, Rect } from "../types";
 
@@ -135,6 +146,8 @@ export function PageViewer({ deckId }: { deckId: number }) {
   const [deckName, setDeckName] = useState("");
   const docRef = useRef<PDFDocumentProxy | null>(null);
   const bookIdRef = useRef<string | undefined>(undefined); // for cross-device progress sync
+  const starMapRef = useRef<StarMap>({}); // ★ LWW-element-set for §4.2 per-key merge sync
+  const bmMapRef = useRef<BmMap>({}); // しおり LWW-element-set
   const [docReady, setDocReady] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
@@ -225,23 +238,75 @@ export function PageViewer({ deckId }: { deckId: number }) {
         setRevealed(new Set(d.revealed ?? []));
         setStarred(new Set(d.starred ?? []));
         bookIdRef.current = d.bookId;
-        // Pro cross-device progress: if the cloud copy is newer, resume from it (reading position /
-        // mode / red-sheet — device-independent fields; reveal state stays local for now).
+        // ★・しおり sync as LWW-element-sets (改修案 §4.2): per-key tombstones so a delete on one
+        // device isn't undone by another's stale set. Seed the maps (stamped "now", so existing local
+        // picks survive migration) for pre-§4.2 decks that only have the starred-ids / bookmark table.
+        const seedAt = Date.now();
+        let starMap: StarMap = d.starsLww ?? {};
+        let bmMap: BmMap = d.bmLww ?? {};
+        if (!d.starsLww || !d.bmLww) {
+          const byPage = new Map<number, CardRow[]>();
+          for (const c of await deckCards(deckId)) {
+            const arr = byPage.get(c.pageIndex) ?? [];
+            arr.push(c);
+            byPage.set(c.pageIndex, arr);
+          }
+          const { idToKey } = cardKeyMaps(byPage);
+          if (!d.starsLww && d.starred?.length)
+            setActiveStars(
+              starMap,
+              d.starred.map((i) => idToKey.get(i)).filter((x): x is string => !!x),
+              seedAt,
+            );
+          if (!d.bmLww)
+            for (const b of await listBookmarks(deckId)) addBm(bmMap, b.title, b.pageIndex, seedAt);
+        }
+        // Pro cross-device progress: MERGE the cloud blob into our local one (position by posAt;
+        // ★・しおり per-key LWW). Fail-open: signed-out / offline keeps local.
         if (useAuth.getState().user && d.bookId) {
           const cloud = await getProgress(d.bookId).catch(() => null);
-          if (!cancelled && cloud && cloud.updatedAt > (d.progressAt ?? 0)) {
-            const { revealedKeys, starredKeys, bookmarks: cloudBms, ...c } = cloud.data;
-            if (typeof c.lastPage === "number")
-              setPageIndex(Math.max(0, Math.min(p.pageCount - 1, c.lastPage)));
-            if (c.lastMode) setMode(c.lastMode);
-            if (c.redMode) setRedMode(c.redMode);
-            if (c.sheetBand) setBand(c.sheetBand);
-            setPendingRevealKeys(revealedKeys ?? []); // applied once this book's cards have loaded
-            setPendingStarKeys(starredKeys ?? []);
-            if (cloudBms) void replaceBookmarks(deckId, cloudBms).catch(() => {}); // synced しおり
-            void updateDeck(deckId, { ...c, progressAt: cloud.updatedAt });
+          if (!cancelled && cloud) {
+            const localNorm = normalize(
+              {
+                lastPage: d.lastPage,
+                lastMode: d.lastMode,
+                redMode: d.redMode,
+                sheetBand: d.sheetBand,
+                revealedKeys: undefined, // revealed stays whole-set; pending effect already restores it
+                posAt: d.progressAt ?? 0,
+                starsLww: starMap,
+                bmLww: bmMap,
+              },
+              seedAt,
+            );
+            const merged = mergeBlobs(localNorm, normalize(cloud.data, cloud.updatedAt));
+            starMap = merged.starsLww ?? {};
+            bmMap = merged.bmLww ?? {};
+            if (typeof merged.lastPage === "number")
+              setPageIndex(Math.max(0, Math.min(p.pageCount - 1, merged.lastPage)));
+            if (merged.lastMode) setMode(merged.lastMode);
+            if (merged.redMode) setRedMode(merged.redMode);
+            if (merged.sheetBand) setBand(merged.sheetBand);
+            setPendingRevealKeys(cloud.data.revealedKeys ?? []); // applied once cards load
+            setPendingStarKeys(activeStarKeys(merged)); // ditto (portable keys -> local ids)
+            void replaceBookmarks(deckId, activeBookmarks(merged)).catch(() => {}); // merged しおり
+            void updateDeck(deckId, {
+              lastPage: merged.lastPage,
+              lastMode: merged.lastMode,
+              redMode: merged.redMode,
+              sheetBand: merged.sheetBand,
+              progressAt: merged.posAt,
+              starsLww: starMap,
+              bmLww: bmMap,
+            });
+          } else if (!cancelled) {
+            void updateDeck(deckId, { starsLww: starMap, bmLww: bmMap }); // persist seeded maps
           }
+        } else {
+          void updateDeck(deckId, { starsLww: starMap, bmLww: bmMap });
         }
+        starMapRef.current = starMap;
+        bmMapRef.current = bmMap;
         // Pro: pull newer masks from the cloud (last-write-wins; fail-open). Replaces cards in Dexie,
         // so the allCards live query re-renders the viewer with masks added/removed on another device.
         if (useAuth.getState().user && d.bookId) await refreshContent(deckId).catch(() => {});
@@ -315,15 +380,29 @@ export function PageViewer({ deckId }: { deckId: number }) {
       const { idToKey } = cardKeyMaps(cardsByPage);
       const toKeys = (ids: Iterable<number>) =>
         [...ids].map((i) => idToKey.get(i)).filter((x): x is string => !!x);
-      void updateDeck(deckId, { progressAt: Date.now() });
+      // Reconcile the ★・しおり maps toward the current live sets (per-key add/tombstone), then push
+      // the maps + posAt. The server merges per-key (§4.2), so this never clobbers another device.
+      const now = Date.now();
+      setActiveStars(starMapRef.current, toKeys(starred), now);
+      setActiveBookmarks(
+        bmMapRef.current,
+        bookmarks.map((b) => ({ title: b.title, pageIndex: b.pageIndex })),
+        now,
+      );
+      void updateDeck(deckId, {
+        progressAt: now,
+        starsLww: starMapRef.current,
+        bmLww: bmMapRef.current,
+      });
       void putProgress(bookIdRef.current!, {
         lastPage: pageIndex,
         lastMode: mode,
         redMode,
         sheetBand: band,
         revealedKeys: toKeys(revealed),
-        starredKeys: toKeys(starred),
-        bookmarks: bookmarks.map((b) => ({ title: b.title, pageIndex: b.pageIndex })),
+        posAt: now,
+        starsLww: starMapRef.current,
+        bmLww: bmMapRef.current,
       }).catch(() => {});
     }, 1500);
     return () => clearTimeout(id);
@@ -341,14 +420,23 @@ export function PageViewer({ deckId }: { deckId: number }) {
         const { idToKey } = cardKeyMaps(cardsByPage);
         const toKeys = (ids: Iterable<number>) =>
           [...ids].map((i) => idToKey.get(i)).filter((x): x is string => !!x);
+        const now = Date.now();
+        setActiveStars(starMapRef.current, toKeys(starred), now);
+        setActiveBookmarks(
+          bmMapRef.current,
+          bookmarks.map((b) => ({ title: b.title, pageIndex: b.pageIndex })),
+          now,
+        );
+        void updateDeck(deckId, { starsLww: starMapRef.current, bmLww: bmMapRef.current });
         void putProgress(bookIdRef.current, {
           lastPage: pageIndex,
           lastMode: mode,
           redMode,
           sheetBand: band,
           revealedKeys: toKeys(revealed),
-          starredKeys: toKeys(starred),
-          bookmarks: bookmarks.map((b) => ({ title: b.title, pageIndex: b.pageIndex })),
+          posAt: now,
+          starsLww: starMapRef.current,
+          bmLww: bmMapRef.current,
         }).catch(() => {});
       }
 
