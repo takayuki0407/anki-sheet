@@ -1980,3 +1980,82 @@ body {
 .trim-row.sel .trim-check { background: var(--sand); border-color: var(--sand); }
 .trim-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trim-device { flex: 0 0 auto; }
+
+/* ---- 機能拡張: 4択 + SRS (生成中UX / 問題一覧 / 演習設定 / 今日の復習) ---- */
+
+/* per-type generated pills on the page cards (○済 / ④済) */
+.page-pills { position: absolute; top: 4px; left: 4px; display: flex; gap: 3px; }
+.page-pills .page-gen { position: static; }
+.page-gen.mc4 { background: #7c3aed; }
+
+/* page run-state overlays (wait / run / done / fail) */
+.page-state {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 800; border-radius: 4px;
+}
+.page-state.wait { background: rgba(120, 110, 95, 0.25); }
+.page-state.run { background: rgba(255, 253, 247, 0.55); }
+.page-state.done { background: rgba(15, 118, 110, 0.45); color: #fff; }
+.page-state.fail { background: rgba(192, 57, 43, 0.4); color: #fff; }
+.page-spinner {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 3px solid rgba(15, 118, 110, 0.25); border-top-color: #0f766e;
+  animation: pgspin 0.8s linear infinite;
+}
+@keyframes pgspin { to { transform: rotate(360deg); } }
+
+/* generation progress panel (replaces the footer button while running) */
+.gen-run { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.gen-bar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.gen-bar-fill { height: 100%; background: var(--sand); transition: width 0.3s ease; }
+.gen-run-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.gen-run-done { display: flex; flex-direction: column; gap: 8px; }
+.gen-run-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* 問題一覧 (browse) */
+.qlist { display: flex; flex-direction: column; gap: 10px; }
+.qlist-page { border: 1px solid var(--line); border-radius: 10px; background: var(--card); overflow: hidden; }
+.qlist-page-head { padding: 8px 12px; font-weight: 800; border-bottom: 1px solid var(--line); }
+.qlist-group + .qlist-group { border-top: 1px solid var(--line); }
+.qlist-group-head {
+  width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 8px 12px; background: none; border: none; font: inherit; color: var(--ink); cursor: pointer;
+}
+.qlist-body { padding: 0 12px 10px; }
+.qlist-items { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
+.qlist-stmt { margin: 0 0 4px; line-height: 1.6; }
+.qlist-ans { margin: 0; font-weight: 700; color: var(--forest); }
+.qlist-choices { margin: 0 0 4px; padding-left: 22px; }
+.qlist-choices .is-answer { font-weight: 800; color: var(--forest); }
+.qlist-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+/* 演習の開始設定 */
+.practice-setup { display: flex; flex-direction: column; gap: 12px; }
+.practice-setup .solve-all { align-self: flex-start; }
+.btn.locked { opacity: 0.75; }
+
+/* 4択の解答ボタン */
+.solve-mc4 { display: flex; flex-direction: column; gap: 10px; }
+.btn.mc4-choice {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  padding: 13px 14px; font-size: 15px; line-height: 1.5;
+  background: var(--card); border: 1px solid var(--line);
+}
+.btn.mc4-choice:hover { border-color: var(--sand); }
+.mc4-no {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg); border: 1px solid var(--line); font-weight: 800; font-size: 13px;
+}
+
+/* 本棚の「今日の復習」カード */
+.review-card {
+  width: 100%; display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+  margin: 4px 0 12px; padding: 14px 16px; border-radius: 12px; cursor: pointer; text-align: left;
+  background: rgba(15, 118, 110, 0.08); border: 1px solid #0f766e; color: var(--ink); font: inherit;
+}
+.review-card:hover { background: rgba(15, 118, 110, 0.14); }
+.review-card-title { font-size: 16px; font-weight: 800; color: #0f766e; }
+.review-card-sub { font-size: 12.5px; color: var(--muted); }
+.review-card.locked { border-color: var(--line); background: var(--card); }
+.review-card.locked .review-card-title { color: var(--muted); }

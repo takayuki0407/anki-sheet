@@ -9,6 +9,7 @@ export type View =
   // `from` remembers where quiz was opened from so its back button returns there (opened from the
   // viewer → back to the book, not the bookshelf). In-memory only (not in the URL); defaults to decks.
   | { name: "quiz"; deckId: number; from?: View }
+  | { name: "review" } // 今日の復習 (cross-book SM-2 session)
   | { name: "info" }
   | { name: "login" }
   | { name: "pricing" }
@@ -39,6 +40,8 @@ export function viewToPath(view: View): string {
       return `/app/settings/${view.deckId}`;
     case "quiz":
       return `/app/quiz/${view.deckId}`;
+    case "review":
+      return "/app/review";
     case "info":
       return "/info";
     case "login":
@@ -54,6 +57,7 @@ export function pathToView(path: string): View {
   if (p === "/price") return { name: "pricing" };
   if (p === "/app") return { name: "decks" };
   if (p === "/app/import") return { name: "import" };
+  if (p === "/app/review") return { name: "review" };
   if (p === "/info") return { name: "info" };
   if (p === "/login") return { name: "login" };
   const read = p.match(/^\/app\/read\/(\d+)$/);

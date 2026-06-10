@@ -53,6 +53,15 @@ export const onRequestDelete: Fn = async (ctx) => {
   }
   await ctx.env.DB.prepare("DELETE FROM books WHERE uid = ? AND book_id = ?").bind(uid, bookId).run();
   await ctx.env.DB.prepare("DELETE FROM progress WHERE uid = ? AND book_id = ?").bind(uid, bookId).run();
+  // Reviews reference questions by id — clear them BEFORE the questions rows vanish (subquery).
+  await ctx.env.DB.prepare(
+    "DELETE FROM reviews WHERE uid = ? AND question_id IN (SELECT id FROM questions WHERE uid = ? AND book_id = ?)",
+  )
+    .bind(uid, uid, bookId)
+    .run();
   await ctx.env.DB.prepare("DELETE FROM questions WHERE uid = ? AND book_id = ?").bind(uid, bookId).run();
+  await ctx.env.DB.prepare("DELETE FROM generated_units WHERE uid = ? AND book_id = ?")
+    .bind(uid, bookId)
+    .run();
   return json({ ok: true });
 };

@@ -13,6 +13,7 @@ import { ImportWizard } from "./components/ImportWizard";
 import { PageViewer } from "./components/PageViewer";
 import { Settings } from "./components/Settings";
 import { QuizScreen } from "./components/QuizScreen";
+import { ReviewScreen } from "./components/ReviewScreen";
 import { Info } from "./components/Info";
 import { Login } from "./components/Login";
 import { DowngradeSelect } from "./components/DowngradeSelect";
@@ -104,6 +105,7 @@ export function App() {
             {view.name === "viewer" && <PageViewer deckId={view.deckId} />}
             {view.name === "settings" && <Settings deckId={view.deckId} />}
             {view.name === "quiz" && <QuizScreen deckId={view.deckId} from={view.from} />}
+            {view.name === "review" && <ReviewScreen />}
             {view.name === "info" && <Info />}
             {view.name === "login" && <Login />}
           </>

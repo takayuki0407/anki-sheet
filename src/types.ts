@@ -103,17 +103,39 @@ export interface PdfRow {
   pageH: number;
 }
 
-/** An AI-generated true/false (○×) question, keyed by the cross-device bookId so it syncs (Pro+)
- * and matches the server `questions` table. One page holds at most 6; regeneration replaces a page. */
+/** AI question type: ○× (true/false) or 4択 (multiple choice). The two sets on a page are
+ * generated and managed independently. */
+export type Qtype = "tf" | "mc4";
+
+/** An AI-generated question, keyed by the cross-device bookId so it syncs (Pro+) and matches the
+ * server `questions` table. One page holds at most 6 per type; regeneration replaces one
+ * (page × type) group. */
 export interface QuestionRow {
   id: string; // uuid (server-assigned)
   bookId: string;
   pageIndex: number;
-  statement: string;
-  answer: "正" | "誤";
+  qtype: Qtype;
+  statement: string; // tf: 記述文 / mc4: 設問文
+  answer: string; // tf: '正'|'誤' / mc4: 正解の選択肢文字列
+  choices: string[] | null; // mc4 only (4 entries)
   explanation: string;
   source: string;
   createdAt: number;
+}
+
+/** Local SM-2 / answer-history record for one question (機能拡張 §A-2). All plans record locally
+ * (drives 間違いのみ復習); Premium also syncs these (今日の復習). Field semantics in sync/srs.ts. */
+export interface ReviewRow {
+  questionId: string;
+  bookId: string;
+  ease: number;
+  intervalD: number;
+  reps: number;
+  lapses: number;
+  dueAt: number;
+  lastAt: number;
+  lastOk: 0 | 1;
+  updatedAt: number;
 }
 
 /** One detected answer (the thing hidden under the red sheet). */

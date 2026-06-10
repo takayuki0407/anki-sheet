@@ -26,11 +26,11 @@ const FAQ = [
   },
   {
     q: "AIで○×問題を作る（解いて確かめる）",
-    a: "本の「問題」から、ページの本文と赤シートで隠す語句をもとにAIが正誤問題（○×）を自動生成します。覚えたつもりを“解いて確かめる”ための機能です。この機能だけは、選んだページの本文と語句を当アプリのサーバー経由で外部のAIサービスに送信します（初回に同意確認）。送信した内容は既定でAIモデルの学習には使われません。生成される問題は誤りを含む場合があるため、内容はご自身で確認してください。色の検出・赤シートなど他の機能は端末内だけで完結します。生成した問題はご自身のアカウント内に保存され、ほかのユーザーへ共有されません。プラン別に月間の生成ページ数の上限があります（残り枠は『情報・ヘルプ → プラン』で確認）。",
+    a: "本の「問題」から、ページの本文と赤シートで隠す語句をもとにAIが正誤問題（○×）を自動生成します。覚えたつもりを“解いて確かめる”ための機能です。この機能だけは、選んだページの本文と語句を当アプリのサーバー経由で外部のAIサービスに送信します（初回に同意確認）。送信した内容は既定でAIモデルの学習には使われません。生成される問題は誤りを含む場合があるため、内容はご自身で確認してください。色の検出・赤シートなど他の機能は端末内だけで完結します。生成した問題はご自身のアカウント内に保存され、ほかのユーザーへ共有されません。プラン別に月間の生成回数の上限があります（1回＝1ページ×問題の種類。残り枠は『情報・ヘルプ → プラン』で確認）。",
   },
   {
     q: "プランについて",
-    a: "サインインだけで使える Free（本1冊・AI 月1ページ）／Standard ¥300（本10冊・AI 月10ページ）／Pro ¥600（本 無制限・AI 月30ページ・全端末でクラウド同期）。本の冊数はアカウント全体（すべての端末の合計）で数えます。未契約でもロックされず Free として使えます。料金は「料金プラン」ページ、現在のプラン・AI残り枠は「情報・ヘルプ → プラン」で確認できます。",
+    a: "サインインだけで使える Free（本1冊・AI生成 月1回）／Standard ¥300（本10冊・AI 月10回）／Pro ¥600（本 無制限・AI 月30回・全端末でクラウド同期）／Premium ¥980（Proの全機能・AI 月200回・「今日の復習」で間違えやすい問題を最適なタイミングに再出題。初回7日間無料）。AI生成は「1回＝1ページ×問題の種類」で数えます。本の冊数はアカウント全体（すべての端末の合計）で数えます。未契約でもロックされず Free として使えます。料金は「料金プラン」ページ、現在のプラン・AI残り枠は「情報・ヘルプ → プラン」で確認できます。",
   },
   {
     q: "本のクラウド保存と復元（Pro）",
@@ -72,19 +72,20 @@ function planLabel(tier?: string): string {
   }
 }
 
-// The AI ○× question monthly page allowance per tier (mirrors the server's genPageLimit).
+// The AI generation monthly allowance per tier (mirrors the server's genPageLimit).
+// One generation = one page × one question type (○× / 4択).
 function aiQuotaLabel(tier?: string): string {
   switch (tier) {
     case "admin":
       return "無制限";
     case "premium":
-      return "月200ページ";
+      return "月200回";
     case "pro":
-      return "月30ページ";
+      return "月30回";
     case "standard":
-      return "月10ページ";
+      return "月10回";
     default:
-      return "月1ページ"; // free / signed-in default
+      return "月1回"; // free / signed-in default
   }
 }
 
@@ -317,7 +318,7 @@ export function Info() {
                 現在のプラン：<strong>{planLabel(usage?.tier)}</strong>
               </p>
               <p className="muted small">
-                AI ○×問題の生成：<strong>{aiQuotaLabel(usage?.tier)}</strong>
+                AI問題の生成：<strong>{aiQuotaLabel(usage?.tier)}</strong>
                 {usage && !usage.unlimited ? `／本は ${usage.limit} 冊まで` : "／本は無制限"}
               </p>
               <div className="plan-compare">
@@ -326,29 +327,43 @@ export function Info() {
                   <p className="plan-price">
                     ¥300<span className="muted small"> /月</span>
                     <br />
-                    <span className="muted small">¥3,000 /年</span>
+                    <span className="muted small">¥2,500 /年</span>
                   </p>
                   <ul>
                     <li>本を10冊まで取り込み</li>
+                    <li>AI問題生成：月10回</li>
                   </ul>
                 </div>
-                <div className={`plan-col pro ${usage?.tier === "pro" ? "current" : ""}`}>
+                <div className={`plan-col ${usage?.tier === "pro" ? "current" : ""}`}>
                   <h4>Pro</h4>
                   <p className="plan-price">
                     ¥600<span className="muted small"> /月</span>
                     <br />
-                    <span className="muted small">¥6,000 /年</span>
+                    <span className="muted small">¥5,000 /年</span>
                   </p>
                   <ul>
                     <li>本を無制限に取り込み</li>
                     <li>クラウド保存・全端末で同期</li>
-                    <li>AI ○×問題：月30ページ</li>
+                    <li>AI問題生成：月30回</li>
+                  </ul>
+                </div>
+                <div className={`plan-col pro ${usage?.tier === "premium" ? "current" : ""}`}>
+                  <h4>Premium</h4>
+                  <p className="plan-price">
+                    ¥980<span className="muted small"> /月</span>
+                    <br />
+                    <span className="muted small">¥8,000 /年</span>
+                  </p>
+                  <ul>
+                    <li>Pro の全機能</li>
+                    <li>AI問題生成：月200回</li>
+                    <li>「今日の復習」（最適なタイミングで再出題）</li>
                   </ul>
                 </div>
               </div>
               <p className="muted small">
-                無料の <strong>Free</strong>（本1冊・AI 月1ページ）はサインインだけで使えます。
-                <strong>Premium</strong>（近日）は Pro に適応SRS復習を追加します。
+                無料の <strong>Free</strong>（本1冊・AI生成 月1回）はサインインだけで使えます。AI生成は
+                「1回＝1ページ×問題の種類」で数えます。<strong>Premium</strong> は初回7日間無料です。
               </p>
               {usage?.tier === "admin" ? (
                 <p className="muted small">

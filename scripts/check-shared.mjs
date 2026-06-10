@@ -35,6 +35,10 @@ const groups = [
     ],
   },
   {
+    name: "srs.ts (SM-2 + reviews LWW — web ↔ iOS)",
+    files: [join(webRoot, "src/sync/srs.ts"), join(iosRoot, "src/sync/srs.ts")],
+  },
+  {
     name: "detect/* (pure color-detection engine — web ↔ iOS engine-src)",
     files: ["colorBand.ts", "detectPage.ts", "heightFilter.ts", "pixelSampler.ts", "runGeometry.ts"]
       .flatMap((f) => [

@@ -9,7 +9,9 @@ import type {
   DetectedCloze,
   PdfRow,
   QuestionRow,
+  Qtype,
   Rect,
+  ReviewRow,
 } from "../types";
 import { cardKey, correspondCards } from "../sync/cardKeys";
 import { setActiveStars, type StarMap } from "../sync/progressMerge";
@@ -291,18 +293,35 @@ export async function deleteBookmark(id: number): Promise<void> {
   await db.bookmarks.delete(id);
 }
 
-// ---- AI-generated ○× questions (keyed by the cross-device bookId) ----
+// ---- AI-generated questions (keyed by the cross-device bookId) ----
 
-/** Replace a single page's questions (initial generation or regeneration → page is replaced). */
+/** Replace one (page × type) question group (initial generation or regeneration). The other
+ * type's questions on the same page are untouched. Reviews of the replaced ids go with them. */
 export async function savePageQuestions(
   bookId: string,
   pageIndex: number,
+  qtype: Qtype,
   qs: QuestionRow[],
 ): Promise<void> {
-  await db.transaction("rw", db.questions, async () => {
-    await db.questions.where("[bookId+pageIndex]").equals([bookId, pageIndex]).delete();
+  await db.transaction("rw", db.questions, db.reviews, async () => {
+    const old = await db.questions
+      .where("[bookId+pageIndex]")
+      .equals([bookId, pageIndex])
+      .filter((q) => q.qtype === qtype)
+      .toArray();
+    await db.questions.bulkDelete(old.map((q) => q.id));
+    await db.reviews.bulkDelete(old.map((q) => q.id));
     if (qs.length) await db.questions.bulkPut(qs);
   });
+}
+
+/** Delete one (page × type) question group + its reviews (問題一覧の削除). */
+export async function deleteQuestionGroup(
+  bookId: string,
+  pageIndex: number,
+  qtype: Qtype,
+): Promise<void> {
+  await savePageQuestions(bookId, pageIndex, qtype, []);
 }
 
 /** Questions for one page. */
@@ -315,23 +334,53 @@ export function getBookQuestions(bookId: string): Promise<QuestionRow[]> {
   return db.questions.where("bookId").equals(bookId).toArray();
 }
 
-/** Per-page question counts for a book (drives the generate/solve status UI). */
-export async function bookQuestionCounts(bookId: string): Promise<Map<number, number>> {
-  const rows = await getBookQuestions(bookId);
-  const m = new Map<number, number>();
-  for (const q of rows) m.set(q.pageIndex, (m.get(q.pageIndex) ?? 0) + 1);
-  return m;
-}
-
-/** Replace ALL of a book's questions (cloud restore for Pro+). */
+/** Replace ALL of a book's questions (cloud restore for Pro+). Reviews of ids that no longer
+ * exist are pruned so a regeneration on another device can't leave orphaned SM-2 state. */
 export async function putBookQuestions(bookId: string, qs: QuestionRow[]): Promise<void> {
-  await db.transaction("rw", db.questions, async () => {
+  await db.transaction("rw", db.questions, db.reviews, async () => {
     await db.questions.where("bookId").equals(bookId).delete();
     if (qs.length) await db.questions.bulkPut(qs);
+    const live = new Set(qs.map((q) => q.id));
+    const stale = (await db.reviews.where("bookId").equals(bookId).toArray())
+      .filter((r) => !live.has(r.questionId))
+      .map((r) => r.questionId);
+    if (stale.length) await db.reviews.bulkDelete(stale);
   });
 }
 
-/** Delete a book's questions (on book delete). */
+/** Delete a book's questions + reviews (on book delete). */
 export async function deleteBookQuestions(bookId: string): Promise<void> {
-  await db.questions.where("bookId").equals(bookId).delete();
+  await db.transaction("rw", db.questions, db.reviews, async () => {
+    await db.questions.where("bookId").equals(bookId).delete();
+    await db.reviews.where("bookId").equals(bookId).delete();
+  });
+}
+
+// ---- SM-2 review records (機能拡張 §A-2/§D — all plans record locally) ----
+
+/** All review records for a book, as a questionId-keyed map. */
+export async function getBookReviews(bookId: string): Promise<Map<string, ReviewRow>> {
+  const rows = await db.reviews.where("bookId").equals(bookId).toArray();
+  return new Map(rows.map((r) => [r.questionId, r]));
+}
+
+/** Upsert one review record (after an answer, or from a cloud pull). */
+export async function putReview(row: ReviewRow): Promise<void> {
+  await db.reviews.put(row);
+}
+
+/** All review records (cross-book — drives the 今日の復習 card + sync push). */
+export function allReviews(): Promise<ReviewRow[]> {
+  return db.reviews.toArray();
+}
+
+/** Due review records across all books, most-overdue first (今日の復習). */
+export async function dueReviews(now: number): Promise<ReviewRow[]> {
+  return db.reviews.where("dueAt").belowOrEqual(now).sortBy("dueAt");
+}
+
+/** Questions by id (cross-book session assembly). Missing ids are dropped. */
+export async function questionsByIds(ids: string[]): Promise<QuestionRow[]> {
+  const rows = await db.questions.bulkGet(ids);
+  return rows.filter((q): q is QuestionRow => !!q);
 }

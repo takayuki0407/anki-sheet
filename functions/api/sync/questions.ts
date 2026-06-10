@@ -11,9 +11,32 @@ export const onRequestGet: Fn = async (ctx) => {
   const tier = await getTier(ctx.env, uid, ctx.data.email);
   if (!isUnlimited(tier)) return json({ questions: [] }); // Free/Standard: questions are local-only
   const { results } = await ctx.env.DB.prepare(
-    "SELECT id, book_id, page_index, statement, answer, explanation, source, created_at FROM questions WHERE uid = ? AND book_id = ? ORDER BY page_index, created_at",
+    "SELECT id, book_id, page_index, qtype, statement, answer, choices, explanation, source, created_at FROM questions WHERE uid = ? AND book_id = ? ORDER BY page_index, created_at",
   )
     .bind(uid, bookId)
-    .all();
-  return json({ questions: results });
+    .all<{ choices: string | null } & Record<string, unknown>>();
+  return json({
+    questions: results.map((q) => ({ ...q, choices: q.choices ? JSON.parse(q.choices) : null })),
+  });
+};
+
+// Delete one (page × type) question group + its reviews (問題一覧の削除). No tier gate — an
+// account may always delete its own rows (Standard simply has none here).
+export const onRequestDelete: Fn = async (ctx) => {
+  const uid = ctx.data.uid!;
+  const url = new URL(ctx.request.url);
+  const bookId = url.searchParams.get("bookId") ?? "";
+  const pageIndex = Number(url.searchParams.get("pageIndex"));
+  const qtype = url.searchParams.get("qtype") ?? "";
+  if (!bookId || !Number.isFinite(pageIndex) || (qtype !== "tf" && qtype !== "mc4"))
+    return json({ error: "bad_request" }, 400);
+  await ctx.env.DB.batch([
+    ctx.env.DB.prepare(
+      "DELETE FROM reviews WHERE uid = ? AND question_id IN (SELECT id FROM questions WHERE uid = ? AND book_id = ? AND page_index = ? AND qtype = ?)",
+    ).bind(uid, uid, bookId, pageIndex, qtype),
+    ctx.env.DB.prepare(
+      "DELETE FROM questions WHERE uid = ? AND book_id = ? AND page_index = ? AND qtype = ?",
+    ).bind(uid, bookId, pageIndex, qtype),
+  ]);
+  return json({ ok: true });
 };

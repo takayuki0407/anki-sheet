@@ -15,7 +15,7 @@ const PLANS = [
       "本を1冊まで取り込み",
       "答えの自動検出・赤マスク／赤シート",
       "目次・縦読み／横読み・倍率調整",
-      "AI ○×問題の自動生成：月1ページ",
+      "AI問題（○×・4択）の自動生成：月1回",
     ],
     highlight: false,
     coming: false,
@@ -24,14 +24,13 @@ const PLANS = [
     key: "standard",
     name: "Standard",
     monthly: 300,
-    yearly: 3000,
+    yearly: 2500,
     tagline: "基本の暗記機能をすべて。たっぷり10冊。",
     features: [
       "本を10冊まで取り込み",
       "答えの自動検出・赤マスク／赤シート",
       "目次・縦読み／横読み・倍率調整",
-      "AI ○×問題の自動生成：月10ページ",
-      "7日間の無料トライアル",
+      "AI問題（○×・4択）の自動生成：月10回",
     ],
     highlight: false,
     coming: false,
@@ -40,30 +39,30 @@ const PLANS = [
     key: "pro",
     name: "Pro",
     monthly: 600,
-    yearly: 6000,
-    tagline: "全部入り。端末をまたいでどこでも。",
+    yearly: 5000,
+    tagline: "端末をまたいでどこでも。",
     features: [
       "本を無制限に取り込み",
       "クラウド保存・全端末／全OSで進捗同期",
-      "AI ○×問題の自動生成：月30ページ",
-      "7日間の無料トライアル",
+      "AI問題（○×・4択）の自動生成：月30回",
     ],
-    highlight: true,
+    highlight: false,
     coming: false,
   },
   {
     key: "premium",
     name: "Premium",
     monthly: 980,
-    yearly: 9800,
+    yearly: 8000,
     tagline: "Pro のすべて＋AIが復習を最適化。",
     features: [
       "Pro のすべて",
-      "適応SRSで最適なタイミングに出題（近日）",
-      "AI ○×問題の自動生成：月200ページ",
+      "「今日の復習」— 間違えやすい問題を最適なタイミングに再出題",
+      "AI問題（○×・4択）の自動生成：月200回",
+      "7日間の無料トライアル",
     ],
-    highlight: false,
-    coming: true,
+    highlight: true,
+    coming: false,
   },
 ];
 
@@ -72,15 +71,16 @@ const COMPARE = [
   { label: "答えの自動検出・赤マスク／赤シート", free: "○", standard: "○", pro: "○", premium: "○" },
   { label: "目次・縦横読み・倍率調整", free: "○", standard: "○", pro: "○", premium: "○" },
   {
-    label: "AI ○×問題の生成（月あたり）",
-    free: "1ページ",
-    standard: "10ページ",
-    pro: "30ページ",
-    premium: "200ページ",
+    label: "AI問題の生成（○×・4択／月あたり）",
+    free: "1回",
+    standard: "10回",
+    pro: "30回",
+    premium: "200回",
   },
+  { label: "間違えた問題だけ復習", free: "○", standard: "○", pro: "○", premium: "○" },
   { label: "クラウド保存・全端末で同期", free: "—", standard: "—", pro: "○", premium: "○" },
-  { label: "適応SRS復習", free: "—", standard: "—", pro: "—", premium: "近日" },
-  { label: "無料トライアル", free: "—", standard: "7日間", pro: "7日間", premium: "7日間" },
+  { label: "「今日の復習」（SRS）", free: "—", standard: "—", pro: "—", premium: "○" },
+  { label: "無料トライアル", free: "—", standard: "—", pro: "—", premium: "7日間" },
 ];
 
 const yen = (n: number) => `¥${n.toLocaleString("ja-JP")}`;
@@ -94,13 +94,13 @@ export function Pricing() {
     <div className="pricing">
       <section className="pricing-hero">
         <h1 className="pricing-title">学習に合わせて選べる料金プラン</h1>
-        <p className="pricing-lead">7日間は無料でお試し。いつでも解約できます。</p>
+        <p className="pricing-lead">無料で1冊から。Premiumは初回7日間無料・いつでも解約できます。</p>
         <div className="pricing-toggle" role="group" aria-label="請求サイクル">
           <button className={annual ? "" : "on"} onClick={() => setAnnual(false)}>
             月額
           </button>
           <button className={annual ? "on" : ""} onClick={() => setAnnual(true)}>
-            年額<span className="save">2ヶ月分お得</span>
+            年額<span className="save">約30%お得</span>
           </button>
         </div>
       </section>
@@ -148,7 +148,7 @@ export function Pricing() {
       </section>
 
       <p className="pricing-note center muted small">
-        現在ブラウザ版は無料でお使いいただけます。サブスクリプション（Standard / Pro / Premium）は順次提供予定です。Premium の適応SRSは近日提供。
+        現在ブラウザ版は無料でお使いいただけます。サブスクリプション（Standard / Pro / Premium）は順次提供予定です。
       </p>
 
       <section className="compare-section">
@@ -185,8 +185,8 @@ export function Pricing() {
           無料で始める
         </button>
         <p className="muted small center">
-          7日間の無料トライアル付き。トライアル終了時に解約しない限り、選択したプランの料金が自動で
-          請求されます。解約はいつでも可能です。
+          Premiumには初回のみ7日間の無料トライアルが付きます。トライアル終了時に解約しない限り、料金が
+          自動で請求されます。解約はいつでも可能です。
         </p>
       </section>
     </div>

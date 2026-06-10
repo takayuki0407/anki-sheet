@@ -7,6 +7,7 @@ import type {
   MetaRow,
   PdfRow,
   QuestionRow,
+  ReviewRow,
 } from "../types";
 
 export class AnkiSheetDB extends Dexie {
@@ -17,6 +18,7 @@ export class AnkiSheetDB extends Dexie {
   covers!: Table<CoverRow, number>;
   meta!: Table<MetaRow, string>;
   questions!: Table<QuestionRow, string>;
+  reviews!: Table<ReviewRow, string>;
 
   constructor() {
     super("ankiSheet");
@@ -44,6 +46,22 @@ export class AnkiSheetDB extends Dexie {
     this.version(5).stores({
       questions: "id, bookId, [bookId+pageIndex]",
     });
+    // v6 (機能拡張 4択とSRS): questions carry qtype('tf'|'mc4') + choices (mc4); per-question SM-2
+    // review records (all plans record locally; Premium syncs). Existing question rows become 'tf'.
+    this.version(6)
+      .stores({
+        questions: "id, bookId, [bookId+pageIndex]",
+        reviews: "questionId, bookId, dueAt",
+      })
+      .upgrade((tx) =>
+        tx
+          .table("questions")
+          .toCollection()
+          .modify((q: { qtype?: string; choices?: unknown }) => {
+            if (!q.qtype) q.qtype = "tf";
+            if (q.choices === undefined) q.choices = null;
+          }),
+      );
   }
 }
 

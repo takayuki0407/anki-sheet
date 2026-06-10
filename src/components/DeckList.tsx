@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
+  allReviews,
   answerCount,
   deleteBookQuestions,
   deleteDeck,
@@ -120,6 +121,15 @@ export function DeckList() {
   const importRef = useRef<HTMLInputElement>(null);
   const user = useAuth((s) => s.user);
 
+  // 今日の復習 (Premium): due SM-2 reviews across ALL books. The count is local data; the tier
+  // (from listBooks below) decides between the live card and the locked upsell card.
+  const [tier, setTier] = useState<string | null>(null);
+  const reviewStats = useLiveQuery(async () => {
+    const all = await allReviews();
+    const now = Date.now();
+    return { any: all.length > 0, due: all.filter((r) => r.dueAt <= now).length };
+  }, []);
+
   // Books in the account that aren't on THIS device yet → offer a one-tap cloud download (Pro only).
   const [cloud, setCloud] = useState<AccountBook[] | null>(null);
   const [cloudPro, setCloudPro] = useState(false);
@@ -127,6 +137,7 @@ export function DeckList() {
     if (!user) {
       setCloud(null);
       setCloudPro(false);
+      setTier(null);
       return;
     }
     let live = true;
@@ -135,6 +146,7 @@ export function DeckList() {
         if (!live) return;
         setCloud(u.books);
         setCloudPro(u.unlimited); // cloud download/restore is Pro+ (incl. Premium / admin)
+        setTier(u.tier);
         const locals = await listDecks();
         // Account-wide trim follow: the server marks trimmed/retained books non-active. Delete this
         // device's local copies of books the account no longer holds as active. (Books unknown to the
@@ -269,6 +281,29 @@ export function DeckList() {
           </select>
         </label>
       </div>
+
+      {tier === "premium" || tier === "admin" ? (
+        reviewStats && reviewStats.due > 0 ? (
+          <button className="review-card" onClick={() => setView({ name: "review" })}>
+            <span className="review-card-title">📚 今日の復習 {reviewStats.due}問</span>
+            <span className="review-card-sub">
+              間違えやすい問題を、忘れる前のいまのタイミングで再出題します
+            </span>
+          </button>
+        ) : null
+      ) : reviewStats?.any && tier ? (
+        <button
+          className="review-card locked"
+          onClick={() =>
+            alert(
+              "「今日の復習」はPremiumの機能です。解いた問題の正誤から、間違えやすい問題を最適なタイミングで再出題します。（プラン変更は現在iOSアプリから行えます）",
+            )
+          }
+        >
+          <span className="review-card-title">🔒 今日の復習（Premium）</span>
+          <span className="review-card-sub">間違えやすい問題を最適なタイミングで再出題</span>
+        </button>
+      ) : null}
 
       {decks === undefined && <p className="muted">読み込み中…</p>}
       {decks && decks.length === 0 && (
