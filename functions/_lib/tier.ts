@@ -1,8 +1,8 @@
 // Plan limits + the tier lookup, shared by the sync handlers. Account-wide caps (Phase 1 overhaul).
 //   Free ¥0:        1 book,  AI 1 page/mo,   NO cloud sync.
 //   Standard ¥300:  10 books, AI 10 page/mo, NO cloud sync.
-//   Pro ¥600:       unlimited, AI 30 page/mo, cloud sync (5GB / 100MB-file).
-//   Premium ¥980 (Phase 2): unlimited, AI 200 page/mo, cloud sync + adaptive SRS.
+//   Pro ¥600:       unlimited, AI 30 gen/mo, cloud sync (5GB / 100MB-file).
+//   Premium ¥980:   unlimited, AI 100 gen/mo, cloud sync + SM-2 SRS (今日の復習).
 //   admin:          unlimited everything (the developer account, by verified email).
 // Tier lives in users.tier, set by the RevenueCat webhook. A signed-in account with NO subscription
 // is Free (NOT Standard) — Free is the floor, incl. the post-trial fallback.
@@ -36,7 +36,7 @@ export function genPageLimit(t: Tier): number {
     case "admin":
       return Number.MAX_SAFE_INTEGER;
     case "premium":
-      return 200;
+      return 100;
     case "pro":
       return 30;
     case "standard":

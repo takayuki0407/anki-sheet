@@ -30,7 +30,7 @@ const FAQ = [
   },
   {
     q: "プランについて",
-    a: "サインインだけで使える Free（本1冊・AI生成 月1回）／Standard ¥300（本10冊・AI 月10回）／Pro ¥600（本 無制限・AI 月30回・全端末でクラウド同期）／Premium ¥980（Proの全機能・AI 月200回・「今日の復習」で間違えやすい問題を最適なタイミングに再出題。初回7日間無料）。AI生成は「1回＝1ページ×問題の種類」で数えます。本の冊数はアカウント全体（すべての端末の合計）で数えます。未契約でもロックされず Free として使えます。料金は「料金プラン」ページ、現在のプラン・AI残り枠は「情報・ヘルプ → プラン」で確認できます。",
+    a: "サインインだけで使える Free（本1冊・AI生成 月1回）／Standard ¥300（本10冊・AI 月10回）／Pro ¥600（本 無制限・AI 月30回・全端末でクラウド同期）／Premium ¥980（Proの全機能・AI 月100回・「今日の復習」で間違えやすい問題を最適なタイミングに再出題。初回7日間無料）。AI生成は「1回＝1ページ×問題の種類」で数えます。本の冊数はアカウント全体（すべての端末の合計）で数えます。未契約でもロックされず Free として使えます。料金は「料金プラン」ページ、現在のプラン・AI残り枠は「情報・ヘルプ → プラン」で確認できます。",
   },
   {
     q: "本のクラウド保存と復元（Pro）",
@@ -79,7 +79,7 @@ function aiQuotaLabel(tier?: string): string {
     case "admin":
       return "無制限";
     case "premium":
-      return "月200回";
+      return "月100回";
     case "pro":
       return "月30回";
     case "standard":
@@ -327,7 +327,7 @@ export function Info() {
                   <p className="plan-price">
                     ¥300<span className="muted small"> /月</span>
                     <br />
-                    <span className="muted small">¥2,500 /年</span>
+                    <span className="muted small">¥3,000 /年</span>
                   </p>
                   <ul>
                     <li>本を10冊まで取り込み</li>
@@ -339,7 +339,7 @@ export function Info() {
                   <p className="plan-price">
                     ¥600<span className="muted small"> /月</span>
                     <br />
-                    <span className="muted small">¥5,000 /年</span>
+                    <span className="muted small">¥6,000 /年</span>
                   </p>
                   <ul>
                     <li>本を無制限に取り込み</li>
@@ -352,11 +352,11 @@ export function Info() {
                   <p className="plan-price">
                     ¥980<span className="muted small"> /月</span>
                     <br />
-                    <span className="muted small">¥8,000 /年</span>
+                    <span className="muted small">¥9,800 /年</span>
                   </p>
                   <ul>
                     <li>Pro の全機能</li>
-                    <li>AI問題生成：月200回</li>
+                    <li>AI問題生成：月100回</li>
                     <li>「今日の復習」（最適なタイミングで再出題）</li>
                   </ul>
                 </div>
