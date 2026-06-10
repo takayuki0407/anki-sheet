@@ -324,42 +324,33 @@ export const onRequestPost: Fn = async (ctx) => {
       });
   }
 
-  // Quota (server-authoritative). The unit is ONE GENERATION = page × type, and it is charged
-  // ONCE per unit: a (page,qtype) that already consumed a slot (generated_units marker) regenerates
-  // for FREE. First-time units RESERVE a slot atomically BEFORE the API call (conditional +1) so
-  // concurrent requests can't double-spend; a failed/empty generation refunds the slot below.
-  // During the 7-day trial the budget is capped (§1.4).
+  // Quota (server-authoritative). The unit is ONE GENERATION = one API call for a (page × type):
+  // first generations AND regenerations both consume a slot (each call costs tokens); only the
+  // cached re-display above is free. RESERVE atomically BEFORE the API call (conditional +1) so
+  // concurrent requests can't double-spend the monthly budget; a failed/empty generation refunds
+  // the slot below (we eat the API cost, not the user's quota). Trial budget is capped (§1.4).
   const limit = genLimitDuringTrial(tier, trialUntil, Date.now());
   const p = period();
-  const alreadyPaid = !!(await ctx.env.DB.prepare(
-    "SELECT 1 AS x FROM generated_units WHERE uid = ? AND book_id = ? AND page_index = ? AND qtype = ?",
+  const reserve = await ctx.env.DB.prepare(
+    `INSERT INTO generation_usage (uid, period, count) VALUES (?, ?, 1)
+     ON CONFLICT(uid, period) DO UPDATE SET count = count + 1 WHERE generation_usage.count < ?`,
   )
-    .bind(uid, bookId, pageIndex, qtype)
-    .first());
-  if (!alreadyPaid) {
-    const reserve = await ctx.env.DB.prepare(
-      `INSERT INTO generation_usage (uid, period, count) VALUES (?, ?, 1)
-       ON CONFLICT(uid, period) DO UPDATE SET count = count + 1 WHERE generation_usage.count < ?`,
+    .bind(uid, p, limit)
+    .run();
+  if ((reserve.meta?.changes ?? 0) === 0) {
+    const usedRow = await ctx.env.DB.prepare(
+      "SELECT count FROM generation_usage WHERE uid = ? AND period = ?",
     )
-      .bind(uid, p, limit)
-      .run();
-    if ((reserve.meta?.changes ?? 0) === 0) {
-      const usedRow = await ctx.env.DB.prepare(
-        "SELECT count FROM generation_usage WHERE uid = ? AND period = ?",
-      )
-        .bind(uid, p)
-        .first<{ count: number }>();
-      return json({ error: "quota_exceeded", count: usedRow?.count ?? limit, limit }, 402);
-    }
+      .bind(uid, p)
+      .first<{ count: number }>();
+    return json({ error: "quota_exceeded", count: usedRow?.count ?? limit, limit }, 402);
   }
   const refund = () =>
-    alreadyPaid
-      ? Promise.resolve()
-      : ctx.env.DB.prepare(
-          "UPDATE generation_usage SET count = count - 1 WHERE uid = ? AND period = ? AND count > 0",
-        )
-          .bind(uid, p)
-          .run();
+    ctx.env.DB.prepare(
+      "UPDATE generation_usage SET count = count - 1 WHERE uid = ? AND period = ? AND count > 0",
+    )
+      .bind(uid, p)
+      .run();
 
   const maxN = DENSITY_MAX[body.density ?? "auto"] ?? HARD_MAX;
   const prevContext = typeof body.prevContext === "string" ? body.prevContext : "";
@@ -389,13 +380,7 @@ export const onRequestPost: Fn = async (ctx) => {
     await refund();
     return json({ error: "empty_generation" }, 422);
   }
-  // (The slot was already reserved atomically above; no second increment.) Mark the unit as paid —
-  // ALL tiers — so future regenerations of this (page × type) are free.
-  await ctx.env.DB.prepare(
-    "INSERT OR IGNORE INTO generated_units (uid, book_id, page_index, qtype, created_at) VALUES (?, ?, ?, ?, ?)",
-  )
-    .bind(uid, bookId, pageIndex, qtype, Date.now())
-    .run();
+  // (The slot was already reserved atomically above; no second increment.)
 
   // Pro+: replace this (page × type)'s stored set in one transaction. The other type's rows on the
   // same page are untouched. Reviews of the replaced question ids are deleted FIRST (same batch) so

@@ -25,7 +25,6 @@ export const onRequestDelete: Fn = async (ctx) => {
   await ctx.env.DB.prepare("DELETE FROM books WHERE uid = ?").bind(uid).run();
   await ctx.env.DB.prepare("DELETE FROM reviews WHERE uid = ?").bind(uid).run();
   await ctx.env.DB.prepare("DELETE FROM questions WHERE uid = ?").bind(uid).run();
-  await ctx.env.DB.prepare("DELETE FROM generated_units WHERE uid = ?").bind(uid).run();
   await ctx.env.DB.prepare("DELETE FROM generation_usage WHERE uid = ?").bind(uid).run();
   await ctx.env.DB.prepare("DELETE FROM users WHERE uid = ?").bind(uid).run();
 

@@ -60,8 +60,5 @@ export const onRequestDelete: Fn = async (ctx) => {
     .bind(uid, uid, bookId)
     .run();
   await ctx.env.DB.prepare("DELETE FROM questions WHERE uid = ? AND book_id = ?").bind(uid, bookId).run();
-  await ctx.env.DB.prepare("DELETE FROM generated_units WHERE uid = ? AND book_id = ?")
-    .bind(uid, bookId)
-    .run();
   return json({ ok: true });
 };

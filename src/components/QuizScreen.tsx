@@ -443,7 +443,7 @@ function ListTab({
   const regenerate = async (page: number, qtype: Qtype) => {
     if (!bookId || !doc || busyKey) return;
     if (!ensureAiConsent()) return;
-    if (!confirm(`P.${page + 1} の${qtypeShort(qtype)}問題を作り直します（今の問題は置き換わります。枠は消費しません）。よろしいですか？`)) return;
+    if (!confirm(`P.${page + 1} の${qtypeShort(qtype)}問題を作り直します（今の問題は置き換わり、生成枠を1回消費します）。よろしいですか？`)) return;
     const key = `${page}:${qtype}`;
     setBusyKey(key);
     setMsg(null);
