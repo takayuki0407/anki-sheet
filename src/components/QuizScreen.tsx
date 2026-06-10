@@ -356,6 +356,9 @@ function GenerateTab({
         生成済み {genCount} / {pages.length} ページ。暗記箇所のあるページをチェックして「まとめて生成」
         （生成済みページは枠を消費しません）。
       </p>
+      <p className="muted small">
+        ⚠ 生成された問題はAIによるもので、誤りを含む場合があります。内容は必ずご自身で確認してください。
+      </p>
 
       <div className="page-picker">
         {displayPages.map((p) => (
