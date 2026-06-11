@@ -5,7 +5,7 @@
 //                      regenerate / delete.
 //   問題を作る (gen) — pick the question TYPE (○×/4択) + pages and generate in bulk, with a
 //                      progress panel + per-page status overlays. One generation = page × type.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useApp, type View } from "../store/session";
@@ -19,7 +19,7 @@ import {
   getDeckPdf,
   listBookmarks,
 } from "../db/repo";
-import { pageTopics } from "../sync/topics";
+import { TOPICS_VERSION, extractHeadings, pageTopics, type TopicBookmark } from "../sync/topics";
 import { getPageText, loadPdf, renderPageImage } from "../pdf/pdfEngine";
 import {
   AiUnavailableError,
@@ -48,6 +48,24 @@ const QTYPE_LABELS: { key: Qtype; label: string }[] = [
   { key: "mc4", label: "4択問題" },
 ];
 export const qtypeShort = (t: Qtype) => (t === "mc4" ? "4択" : "○×");
+
+/** Where the chapter labels came from — drives the "maintain your own 目次" nudge. */
+type TopicSource = "bookmarks" | "auto" | "none";
+
+function TocHint({ source, onOpen }: { source: TopicSource; onOpen: () => void }) {
+  return (
+    <p className="muted small toc-hint">
+      {source === "bookmarks"
+        ? "章の見出しはこの本の目次（しおり）にもとづいています。編集すると、ここにも反映されます。"
+        : source === "auto"
+          ? "章の見出しは本文からの自動推定です。目次（しおり）を作ると、そちらが優先され正確になります。"
+          : "目次（しおり）を追加すると、問題を章ごとに表示できます。"}
+      <button className="toc-link" onClick={onOpen}>
+        目次を開く →
+      </button>
+    </p>
+  );
+}
 
 type PageFilter = "all" | "todo" | "done";
 const PAGE_FILTERS: { key: PageFilter; label: string }[] = [
@@ -154,31 +172,68 @@ export function QuizScreen({ deckId, from }: { deckId: number; from?: View }) {
   const premium = usage?.tier === "premium" || usage?.tier === "admin";
 
   // Topic labels for pages that have questions ("P.14" alone doesn't tell the user which chapter
-  // it is): the deck's 目次 (bookmarks) first, page-text heading heuristic as fallback.
+  // it is). The deck's real 目次 (bookmarks) wins; otherwise a TOC is auto-detected from the whole
+  // book's text once and cached per deck. Labels carry forward (see src/sync/topics.ts).
+  // `topicSource` drives the hint that nudges users toward maintaining the 目次 themselves.
   const [topics, setTopics] = useState<Map<number, string>>(new Map());
+  const [topicSource, setTopicSource] = useState<TopicSource>("none");
   const topicPagesKey = useMemo(
     () =>
       [...new Set(questions.map((q) => q.pageIndex))].sort((a, b) => a - b).join(","),
     [questions],
   );
   useEffect(() => {
-    if (!topicPagesKey) {
+    if (!topicPagesKey || !pageCount) {
       setTopics(new Map());
       return;
     }
     let live = true;
     void (async () => {
       const pages = topicPagesKey.split(",").map(Number);
-      const marks = await listBookmarks(deckId).catch(() => []);
-      const texts = new Map<number, string>();
-      const getText = doc ? makePageTextGetter(doc, pageCount) : null;
-      for (const p of pages) texts.set(p, getText ? await getText(p) : "");
-      if (live) setTopics(pageTopics(texts, marks));
+      let toc: TopicBookmark[] = (await listBookmarks(deckId).catch(() => [])).filter((b) =>
+        b.title.trim(),
+      );
+      const fromBookmarks = toc.length > 0;
+      if (!toc.length) {
+        const cacheKey = `kk.autoToc.${deckId}`;
+        let cachedValid = false;
+        try {
+          const cached = JSON.parse(localStorage.getItem(cacheKey) ?? "null") as {
+            v?: number;
+            pageCount: number;
+            toc: TopicBookmark[];
+          } | null;
+          if (cached && cached.v === TOPICS_VERSION && cached.pageCount === pageCount) {
+            toc = cached.toc;
+            cachedValid = true;
+          }
+        } catch {
+          /* recompute below */
+        }
+        if (!cachedValid && doc) {
+          const getText = makePageTextGetter(doc, pageCount);
+          const texts = new Map<number, string>();
+          for (let p = 0; p < pageCount && live; p++) texts.set(p, await getText(p));
+          if (!live) return;
+          toc = extractHeadings(texts);
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify({ v: TOPICS_VERSION, pageCount, toc }));
+          } catch {
+            /* cache is best-effort */
+          }
+        }
+      }
+      if (live) {
+        setTopics(pageTopics(pages, toc));
+        setTopicSource(toc.length ? (fromBookmarks ? "bookmarks" : "auto") : "none");
+      }
     })();
     return () => {
       live = false;
     };
   }, [topicPagesKey, doc, pageCount, deckId]);
+
+  const openToc = useCallback(() => setView({ name: "viewer", deckId }), [setView, deckId]);
 
   const startPractice = (rows: QuestionRow[]) => {
     setPendingSession(rows);
@@ -230,6 +285,8 @@ export function QuizScreen({ deckId, from }: { deckId: number; from?: View }) {
           premium={premium}
           pageCount={pageCount}
           topics={topics}
+          topicSource={topicSource}
+          onOpenToc={openToc}
           pendingSession={pendingSession}
           clearPending={() => setPendingSession(null)}
           onAnswered={refreshReviews}
@@ -243,6 +300,8 @@ export function QuizScreen({ deckId, from }: { deckId: number; from?: View }) {
           bookId={bookId}
           termsByPage={termsByPage}
           topics={topics}
+          topicSource={topicSource}
+          onOpenToc={openToc}
           onChanged={refreshUsage}
           onPractice={startPractice}
         />
@@ -274,6 +333,8 @@ function PracticeTab({
   premium,
   pageCount,
   topics,
+  topicSource,
+  onOpenToc,
   pendingSession,
   clearPending,
   onAnswered,
@@ -284,6 +345,8 @@ function PracticeTab({
   premium: boolean;
   pageCount: number;
   topics: Map<number, string>;
+  topicSource: TopicSource;
+  onOpenToc: () => void;
   pendingSession: QuestionRow[] | null;
   clearPending: () => void;
   onAnswered: () => void;
@@ -345,7 +408,24 @@ function PracticeTab({
   const target = matches(ptype, mode);
   const wrongCount = matches(ptype, "wrong").length;
   const dueCount = matches(ptype, "due").length;
-  const targetPages = [...new Set(target.map((q) => q.pageIndex))].sort((a, b) => a - b);
+
+  // Group the current target by chapter label (pages without a label stand alone as "P.x"),
+  // so the user can see at a glance WHAT is in range — and tap a chapter to drill just it.
+  const chapterGroups: { key: string; title: string; rows: QuestionRow[] }[] = [];
+  {
+    const idx = new Map<string, number>();
+    for (const q of target) {
+      const label = topics.get(q.pageIndex);
+      const key = label ?? `p${q.pageIndex}`;
+      const at = idx.get(key);
+      if (at === undefined) {
+        idx.set(key, chapterGroups.length);
+        chapterGroups.push({ key, title: label ?? `P.${q.pageIndex + 1}`, rows: [q] });
+      } else {
+        chapterGroups[at].rows.push(q);
+      }
+    }
+  }
 
   return (
     <div className="practice-setup">
@@ -417,16 +497,28 @@ function PracticeTab({
         </div>
       </div>
 
-      {targetPages.length ? (
-        <p className="muted small range-topics">
-          出題範囲：
-          {targetPages
-            .slice(0, 6)
-            .map((p) => `P.${p + 1}${topics.get(p) ? `「${topics.get(p)}」` : ""}`)
-            .join(" ・ ")}
-          {targetPages.length > 6 ? ` ほか${targetPages.length - 6}ページ` : ""}
-        </p>
+      {chapterGroups.length ? (
+        <div className="gen-row">
+          <span className="gen-label">内容</span>
+          <div className="chapter-chips">
+            {chapterGroups.map((c) => (
+              <button
+                key={c.key}
+                className="chapter-chip"
+                onClick={() => setSession(c.rows)}
+                title="この範囲だけ演習をはじめる"
+              >
+                <span className="chapter-chip-title">{c.title}</span>
+                <span className="chapter-chip-count">{c.rows.length}問</span>
+              </button>
+            ))}
+          </div>
+        </div>
       ) : null}
+      {chapterGroups.length ? (
+        <p className="muted small">章をタップすると、その範囲だけすぐに演習できます。</p>
+      ) : null}
+      <TocHint source={topicSource} onOpen={onOpenToc} />
 
       <button
         className="btn primary solve-all"
@@ -451,6 +543,8 @@ function ListTab({
   bookId,
   termsByPage,
   topics,
+  topicSource,
+  onOpenToc,
   onChanged,
   onPractice,
 }: {
@@ -460,6 +554,8 @@ function ListTab({
   bookId: string | undefined;
   termsByPage: Map<number, string[]>;
   topics: Map<number, string>;
+  topicSource: TopicSource;
+  onOpenToc: () => void;
   onChanged: () => void;
   onPractice: (rows: QuestionRow[]) => void;
 }) {
@@ -533,13 +629,15 @@ function ListTab({
       <p className="muted small">
         ○× {tfTotal}問 ・ 4択 {mc4Total}問
       </p>
+      <TocHint source={topicSource} onOpen={onOpenToc} />
       {msg ? <p className="quiz-msg">{msg}</p> : null}
-      {byPage.map(([page, g]) => (
-        <div className="qlist-page" key={page}>
-          <div className="qlist-page-head">
-            P.{page + 1}
-            {topics.get(page) ? <span className="qlist-topic">{topics.get(page)}</span> : null}
-          </div>
+      {byPage.map(([page, g], i) => (
+        <Fragment key={page}>
+          {topics.get(page) && topics.get(page) !== (i > 0 ? topics.get(byPage[i - 1][0]) : undefined) ? (
+            <div className="qlist-chapter">{topics.get(page)}</div>
+          ) : null}
+        <div className="qlist-page">
+          <div className="qlist-page-head">P.{page + 1}</div>
           {(["tf", "mc4"] as Qtype[]).map((t) => {
             const qs = g[t];
             if (!qs.length) return null;
@@ -591,6 +689,7 @@ function ListTab({
             );
           })}
         </div>
+        </Fragment>
       ))}
     </div>
   );

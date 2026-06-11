@@ -2071,3 +2071,39 @@ body {
   line-height: 1.7;
   margin: 2px 0 0;
 }
+
+/* chapter grouping (問題一覧の章区切り・演習設定の章チップ) */
+.qlist-chapter {
+  margin: 12px 2px 0;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.chapter-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chapter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  cursor: pointer;
+  font-size: 14px;
+}
+.chapter-chip:hover { border-color: var(--sand); }
+.chapter-chip-title { font-weight: 700; color: var(--ink); }
+.chapter-chip-count { font-size: 12.5px; color: var(--muted); }
+
+/* 目次（しおり）への誘導ヒント */
+.toc-hint { line-height: 1.7; }
+.toc-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 6px;
+  font: inherit;
+  color: var(--ocean);
+  cursor: pointer;
+  text-decoration: underline;
+}
