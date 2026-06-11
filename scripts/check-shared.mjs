@@ -39,6 +39,10 @@ const groups = [
     files: [join(webRoot, "src/sync/srs.ts"), join(iosRoot, "src/sync/srs.ts")],
   },
   {
+    name: "topics.ts (page-topic labels — web ↔ iOS)",
+    files: [join(webRoot, "src/sync/topics.ts"), join(iosRoot, "src/sync/topics.ts")],
+  },
+  {
     name: "detect/* (pure color-detection engine — web ↔ iOS engine-src)",
     files: ["colorBand.ts", "detectPage.ts", "heightFilter.ts", "pixelSampler.ts", "runGeometry.ts"]
       .flatMap((f) => [

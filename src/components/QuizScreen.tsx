@@ -17,7 +17,9 @@ import {
   getBookReviews,
   getDeck,
   getDeckPdf,
+  listBookmarks,
 } from "../db/repo";
+import { pageTopics } from "../sync/topics";
 import { getPageText, loadPdf, renderPageImage } from "../pdf/pdfEngine";
 import {
   AiUnavailableError,
@@ -151,6 +153,33 @@ export function QuizScreen({ deckId, from }: { deckId: number; from?: View }) {
 
   const premium = usage?.tier === "premium" || usage?.tier === "admin";
 
+  // Topic labels for pages that have questions ("P.14" alone doesn't tell the user which chapter
+  // it is): the deck's 目次 (bookmarks) first, page-text heading heuristic as fallback.
+  const [topics, setTopics] = useState<Map<number, string>>(new Map());
+  const topicPagesKey = useMemo(
+    () =>
+      [...new Set(questions.map((q) => q.pageIndex))].sort((a, b) => a - b).join(","),
+    [questions],
+  );
+  useEffect(() => {
+    if (!topicPagesKey) {
+      setTopics(new Map());
+      return;
+    }
+    let live = true;
+    void (async () => {
+      const pages = topicPagesKey.split(",").map(Number);
+      const marks = await listBookmarks(deckId).catch(() => []);
+      const texts = new Map<number, string>();
+      const getText = doc ? makePageTextGetter(doc, pageCount) : null;
+      for (const p of pages) texts.set(p, getText ? await getText(p) : "");
+      if (live) setTopics(pageTopics(texts, marks));
+    })();
+    return () => {
+      live = false;
+    };
+  }, [topicPagesKey, doc, pageCount, deckId]);
+
   const startPractice = (rows: QuestionRow[]) => {
     setPendingSession(rows);
     setTab("solve");
@@ -200,6 +229,7 @@ export function QuizScreen({ deckId, from }: { deckId: number; from?: View }) {
           reviews={reviews}
           premium={premium}
           pageCount={pageCount}
+          topics={topics}
           pendingSession={pendingSession}
           clearPending={() => setPendingSession(null)}
           onAnswered={refreshReviews}
@@ -212,6 +242,7 @@ export function QuizScreen({ deckId, from }: { deckId: number; from?: View }) {
           pageCount={pageCount}
           bookId={bookId}
           termsByPage={termsByPage}
+          topics={topics}
           onChanged={refreshUsage}
           onPractice={startPractice}
         />
@@ -242,6 +273,7 @@ function PracticeTab({
   reviews,
   premium,
   pageCount,
+  topics,
   pendingSession,
   clearPending,
   onAnswered,
@@ -251,6 +283,7 @@ function PracticeTab({
   reviews: Map<string, ReviewRow>;
   premium: boolean;
   pageCount: number;
+  topics: Map<number, string>;
   pendingSession: QuestionRow[] | null;
   clearPending: () => void;
   onAnswered: () => void;
@@ -312,6 +345,7 @@ function PracticeTab({
   const target = matches(ptype, mode);
   const wrongCount = matches(ptype, "wrong").length;
   const dueCount = matches(ptype, "due").length;
+  const targetPages = [...new Set(target.map((q) => q.pageIndex))].sort((a, b) => a - b);
 
   return (
     <div className="practice-setup">
@@ -383,6 +417,17 @@ function PracticeTab({
         </div>
       </div>
 
+      {targetPages.length ? (
+        <p className="muted small range-topics">
+          出題範囲：
+          {targetPages
+            .slice(0, 6)
+            .map((p) => `P.${p + 1}${topics.get(p) ? `「${topics.get(p)}」` : ""}`)
+            .join(" ・ ")}
+          {targetPages.length > 6 ? ` ほか${targetPages.length - 6}ページ` : ""}
+        </p>
+      ) : null}
+
       <button
         className="btn primary solve-all"
         disabled={!target.length}
@@ -405,6 +450,7 @@ function ListTab({
   pageCount,
   bookId,
   termsByPage,
+  topics,
   onChanged,
   onPractice,
 }: {
@@ -413,6 +459,7 @@ function ListTab({
   pageCount: number;
   bookId: string | undefined;
   termsByPage: Map<number, string[]>;
+  topics: Map<number, string>;
   onChanged: () => void;
   onPractice: (rows: QuestionRow[]) => void;
 }) {
@@ -489,7 +536,10 @@ function ListTab({
       {msg ? <p className="quiz-msg">{msg}</p> : null}
       {byPage.map(([page, g]) => (
         <div className="qlist-page" key={page}>
-          <div className="qlist-page-head">P.{page + 1}</div>
+          <div className="qlist-page-head">
+            P.{page + 1}
+            {topics.get(page) ? <span className="qlist-topic">{topics.get(page)}</span> : null}
+          </div>
           {(["tf", "mc4"] as Qtype[]).map((t) => {
             const qs = g[t];
             if (!qs.length) return null;

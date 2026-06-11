@@ -305,6 +305,9 @@ export function ImportWizard() {
             次の画面で答えの色（自動／赤・マゼンタなど）を選んで検出します。
             解析はこの端末内で行われます（クラウド同期を使う場合のみ、Proでアカウントに保存）。
           </p>
+          <p className="dz-note">
+            ※スキャン画像のPDF（文字を選択できない・テキスト情報のないもの）には対応していません。
+          </p>
           <input ref={inputRef} type="file" accept="application/pdf" hidden onChange={onPick} />
         </div>
       )}
@@ -356,6 +359,12 @@ export function ImportWizard() {
             <strong>{phase.result.clozes.length}</strong> 個の語句を検出しました
             （{phase.result.pageCount}ページ）
           </p>
+          {phase.result.clozes.length === 0 && (
+            <p className="muted small">
+              語句が見つかりませんでした。答えの色を変えて「この色で再検出」をお試しください。
+              なお、スキャン画像のPDF（テキスト情報のないもの）は検出・AI問題生成に対応していません。
+            </p>
+          )}
           {phase.result.outline.length > 0 && (
             <p className="muted small">
               PDFの目次 {phase.result.outline.length} 件もしおりに取り込みます
