@@ -369,7 +369,7 @@ export function Info() {
                 <p className="muted small">
                   管理者アカウントのため、すべての機能を無制限でご利用いただけます。
                 </p>
-              ) : usage?.tier === "pro" ? (
+              ) : usage?.tier === "pro" || usage?.tier === "premium" ? (
                 <button
                   className="btn ghost sm"
                   onClick={() =>
@@ -385,11 +385,11 @@ export function Info() {
                   className="btn primary sm"
                   onClick={() =>
                     alert(
-                      "Proへのアップグレードは現在 iOSアプリ から行えます（Web版の課金は準備中です）。",
+                      "アップグレードは現在 iOSアプリ から行えます（Web版の課金は準備中です）。",
                     )
                   }
                 >
-                  Pro にアップグレード
+                  アップグレード
                 </button>
               )}
               <DevTierSwitch />
