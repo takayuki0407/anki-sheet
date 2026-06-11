@@ -35,10 +35,13 @@ async function applyTier(
   trialUntil: number,
 ): Promise<void> {
   // Idempotency: ignore an event older than what we've already applied (out-of-order / duplicate).
-  const cur = await ctx.env.DB.prepare("SELECT updated_at FROM users WHERE uid = ?")
+  // An 'admin' row is the developer's dev state (set via /api/sync/dev/tier), never
+  // subscription-driven — no store event may overwrite it (including as a TRANSFER target).
+  const cur = await ctx.env.DB.prepare("SELECT tier, updated_at FROM users WHERE uid = ?")
     .bind(uid)
-    .first<{ updated_at: number }>();
+    .first<{ tier: string; updated_at: number }>();
   if (cur && cur.updated_at > eventTime) return;
+  if (cur?.tier === "admin") return;
 
   // Downgrade: if the new cap is below the account's ACTIVE book count, require a trim.
   const newCap = limitFor(tier);
