@@ -3,7 +3,7 @@
 // incoming blob into the stored one per-key (adds/deletes both converge), so a stale push can't wipe
 // another device's edits. Position group is whole-blob LWW gated by `posAt`. Pro-only.
 import { json, type Fn } from "../../../_lib/types";
-import { getTier, isUnlimited } from "../../../_lib/tier";
+import { canFetchOwnBook, getTier, isUnlimited } from "../../../_lib/tier";
 import {
   normalize,
   mergeBlobs,
@@ -57,7 +57,12 @@ export const onRequestPut: Fn = async (ctx) => {
 
 export const onRequestGet: Fn = async (ctx) => {
   const uid = ctx.data.uid!;
-  if (!isUnlimited(await getTier(ctx.env, uid, ctx.data.email)))
+  // Owner egress mirrors the blob/content rule: progress (reading position / ★ / しおり) for an
+  // ACTIVE book is readable on any tier, so a downloaded book opens where the user left off.
+  const book = await ctx.env.DB.prepare("SELECT status FROM books WHERE uid = ? AND book_id = ?")
+    .bind(uid, ctx.params.bookId)
+    .first<{ status: string }>();
+  if (!canFetchOwnBook(book?.status, await getTier(ctx.env, uid, ctx.data.email)))
     return json({ error: "pro_required" }, 403);
   const row = await ctx.env.DB.prepare(
     "SELECT data, updated_at FROM progress WHERE uid = ? AND book_id = ?",

@@ -22,6 +22,14 @@ export const onRequestPost: Fn = async (ctx) => {
   const cap = limitFor(tier);
   if (keep.length > cap) return json({ error: "too_many", cap }, 400);
 
+  // Stale-screen guard: if the trim is no longer required — e.g. the user re-upgraded to Pro while
+  // the trim screen was open (the webhook already cleared the flag and reactivated retained books)
+  // — a late submit must NOT demote anything.
+  const u = await ctx.env.DB.prepare("SELECT trim_required FROM users WHERE uid = ?")
+    .bind(uid)
+    .first<{ trim_required: number }>();
+  if (!u?.trim_required) return json({ ok: true, kept: 0, skipped: true });
+
   if (keep.length) {
     const ph = keep.map(() => "?").join(",");
     await ctx.env.DB.prepare(

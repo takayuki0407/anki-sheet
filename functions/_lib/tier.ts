@@ -20,6 +20,13 @@ export type Tier = "free" | "standard" | "pro" | "premium" | "admin";
 export function isUnlimited(t: Tier): boolean {
   return t === "pro" || t === "premium" || t === "admin";
 }
+/** Owner data egress: an ACTIVE book's cloud data (PDF blob / content / progress) is readable on
+ * ANY tier — a downgraded Standard/Free account must always be able to materialize the books it
+ * kept (no data hostage). Non-active books (retained/trimmed) stay Pro-only: they're preserved
+ * purely for the re-Pro restore. Writes (PUT) remain Pro-only everywhere. */
+export function canFetchOwnBook(status: string | null | undefined, tier: Tier): boolean {
+  return (status ?? "active") === "active" || isUnlimited(tier);
+}
 /** Whether the tier gets cloud sync (PDF/content/progress/questions). */
 export function canSync(t: Tier): boolean {
   return isUnlimited(t);

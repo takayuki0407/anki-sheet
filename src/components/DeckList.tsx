@@ -344,7 +344,7 @@ export function DeckList() {
           <p className="muted small">
             {cloudPro
               ? "同じアカウントの本です。「この端末に取り込む」で追加、「クラウドから完全に削除」ですべての端末から削除します。"
-              : "同じアカウントの、この端末にない本です。各本の「…枠を空ける」でアカウントの枠を解放できます。クラウド保存がある本はProに戻すと復元できますが、ない本は復元できません。"}
+              : "同じアカウントの、この端末にない本です。クラウド保存（☁️）がある本は「この端末に取り込む」で移せます。「…枠を空ける」でアカウントの枠を解放できますが、クラウド保存のない本は復元できません。"}
           </p>
           <ul className="cloud-list">
             {remote.map((b) => (
@@ -362,10 +362,11 @@ export function DeckList() {
   );
 }
 
-/** A cloud account book not on this device. Pro+ (canDownload): download it back, or permanently
- * delete it from the cloud (R2 file + registry row, whole account). Standard/Free: a SINGLE action
- * frees the account slot held by another device — retain (size>0, R2 kept, re-Pro restorable) or
- * unregister (size=0, device-only → permanent). The holder then drops its local copy on reconcile. */
+/** A cloud account book not on this device. Download (size>0) works on EVERY tier — the server
+ * opens an ACTIVE book's blob/content to its owner, so a downgraded Standard/Free account can
+ * still materialize a cloud-only book instead of being forced to discard it. Pro+ additionally
+ * gets「クラウドから完全に削除」; Standard/Free instead get the slot-freeing action — retain
+ * (size>0, R2 kept, re-Pro restorable) or unregister (size=0, device-only → permanent). */
 function CloudBook({
   book,
   canDownload,
@@ -442,17 +443,15 @@ function CloudBook({
       <span className="cloud-device">
         {holder ? `「${holder}」に保存` : "クラウドのみ（端末未保存）"}
       </span>
+      {hasBlob && (
+        <button className="btn sm" onClick={download} disabled={busy}>
+          {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
+        </button>
+      )}
       {canDownload ? (
-        <>
-          {hasBlob && (
-            <button className="btn sm" onClick={download} disabled={busy}>
-              {busy ? "取り込み中…" : errMsg ? "再試行" : "この端末に取り込む"}
-            </button>
-          )}
-          <button className="btn sm danger-outline" onClick={removePermanent} disabled={busy}>
-            クラウドから完全に削除
-          </button>
-        </>
+        <button className="btn sm danger-outline" onClick={removePermanent} disabled={busy}>
+          クラウドから完全に削除
+        </button>
       ) : (
         <button
           className="btn sm danger-outline"

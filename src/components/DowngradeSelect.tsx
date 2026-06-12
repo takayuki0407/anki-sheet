@@ -69,7 +69,13 @@ export function DowngradeSelect({
     setBusy(true);
     try {
       // Server makes the kept set authoritative (kept→active, others→retained/trimmed).
-      await submitTrim([...keep]);
+      const trim = await submitTrim([...keep]);
+      if (trim.skipped) {
+        // The server skipped the trim (no longer required — e.g. re-upgraded meanwhile):
+        // nothing was demoted, so do NOT delete anything locally either.
+        onResolved();
+        return;
+      }
       const locals = await listDecks();
       const localIds = new Set(locals.map((d) => d.bookId).filter(Boolean) as string[]);
       // Reconcile THIS device: delete local copies of books that weren't kept.

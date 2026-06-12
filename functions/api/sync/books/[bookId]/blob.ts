@@ -3,7 +3,13 @@
 // total. Returns 503 until R2 is enabled + bound (PDFS). egress from R2 is free, so downloads
 // to other devices cost nothing.
 import { json, type Fn } from "../../../../_lib/types";
-import { getTier, isUnlimited, MAX_FILE_BYTES, PRO_STORAGE_BYTES } from "../../../../_lib/tier";
+import {
+  canFetchOwnBook,
+  getTier,
+  isUnlimited,
+  MAX_FILE_BYTES,
+  PRO_STORAGE_BYTES,
+} from "../../../../_lib/tier";
 
 const r2key = (uid: string, bookId: string) => `${uid}/${bookId}.pdf`;
 
@@ -56,7 +62,7 @@ export const onRequestGet: Fn = async (ctx) => {
   const row = await ctx.env.DB.prepare("SELECT status FROM books WHERE uid = ? AND book_id = ?")
     .bind(uid, ctx.params.bookId)
     .first<{ status: string }>();
-  if ((row?.status ?? "active") !== "active" && !isUnlimited(await getTier(ctx.env, uid, ctx.data.email)))
+  if (!canFetchOwnBook(row?.status, await getTier(ctx.env, uid, ctx.data.email)))
     return json({ error: "pro_required" }, 403);
   const obj = await ctx.env.PDFS.get(r2key(uid, ctx.params.bookId));
   if (!obj) return json({ error: "not_found" }, 404);
