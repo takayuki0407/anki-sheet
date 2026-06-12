@@ -306,7 +306,7 @@ export function ImportWizard() {
             解析はこの端末内で行われます（クラウド同期を使う場合のみ、Proでアカウントに保存）。
           </p>
           <p className="dz-note">
-            ※スキャン画像のPDF（文字を選択できない・テキスト情報のないもの）には対応していません。
+            ※スキャン画像のPDF（文字を選択できない・テキスト情報のないもの）は現在非対応です。今後のアップデートで対応予定です。
           </p>
           <input ref={inputRef} type="file" accept="application/pdf" hidden onChange={onPick} />
         </div>
