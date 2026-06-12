@@ -391,7 +391,7 @@ body {
   box-sizing: border-box;
 }
 .viewer:fullscreen .page-scroll {
-  height: calc(100dvh - 116px);
+  height: auto; /* flex fills the fullscreen viewport */
 }
 
 /* Continuous (vertical scroll) reading mode */
@@ -409,7 +409,7 @@ body {
   padding: 8px 0;
 }
 .viewer:fullscreen .continuous-scroll {
-  height: calc(100dvh - 116px);
+  height: auto; /* flex fills the fullscreen viewport */
 }
 /* Hand-tool affordance: drag with a mouse/pen to pan a zoomed page (see useDragPan). */
 .viewer .page-scroll,
@@ -660,10 +660,27 @@ body {
 }
 
 /* Viewer */
+/* 読書中はウィンドウ自体のスクロールを禁止する（スクロールはページ領域だけ）。
+   .viewer は100dvhに収まるが、body配下の他要素（トースト等）が高さを足しても影響しないように。 */
+body:has(.viewer) {
+  overflow: hidden;
+}
 .viewer {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
+  /* Fill the viewport so the page area absorbs ALL leftover height — no dead space below the
+     nav bar. The fixed calc() heights on the scroll containers are overridden below. */
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden; /* ページ領域だけがスクロールし、ウィンドウは決してスクロールしない */
+  padding: 10px 0 14px; /* 下端は常に14px */
+}
+.viewer .page-scroll,
+.viewer .continuous-scroll {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 220px;
 }
 .viewer-nav {
   display: flex;
