@@ -9,7 +9,7 @@ import { applyDeviceNameToLocalBooks } from "../sync/deck";
 import { clearAllLocalData } from "../db/backup";
 import { DevTierSwitch } from "./DevTierSwitch";
 
-const SUPPORT_EMAIL = "zabieru.0407@gmail.com";
+const SUPPORT_EMAIL = "kiokumate@tkdevlab.com";
 
 const FAQ = [
   {
