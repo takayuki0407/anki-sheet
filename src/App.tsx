@@ -30,7 +30,7 @@ const MARKETING = new Set(["home", "service", "pricing"]);
 const PRIVATE = import.meta.env.VITE_PUBLIC !== "true";
 
 // App pages (vs marketing/login/info) require sign-in.
-const APP_VIEWS = new Set(["decks", "import", "viewer", "settings", "quiz"]);
+const APP_VIEWS = new Set(["decks", "import", "viewer", "settings", "quiz", "review"]);
 
 export function App() {
   const view = useApp((s) => s.view);

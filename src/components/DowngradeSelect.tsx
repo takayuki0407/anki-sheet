@@ -25,15 +25,23 @@ export function DowngradeSelect({
   onResolved: () => void;
 }) {
   const [books, setBooks] = useState<AccountBook[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [keep, setKeep] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [backedUp, setBackedUp] = useState(false);
 
-  useEffect(() => {
+  // A fetch failure must NOT masquerade as「本が0冊」— an empty list would enable
+  //「選んだ 0 冊を残す」, which demotes the WHOLE library. Error → explicit retry.
+  const load = useCallback(() => {
+    setLoadError(false);
+    setBooks(null);
     void listBooks()
-      .then((u) => setBooks(u.books))
-      .catch(() => setBooks([]));
+      // Trim chooses among the ACTIVE (cap-relevant) books only — retained/trimmed books are
+      // already off-cap and must not be resurrectable from this screen.
+      .then((u) => setBooks(u.books.filter((b) => (b.status ?? "active") === "active")))
+      .catch(() => setLoadError(true));
   }, []);
+  useEffect(load, [load]);
 
   const toggle = useCallback(
     (id: string) =>
@@ -57,12 +65,12 @@ export function DowngradeSelect({
   }, []);
 
   const apply = useCallback(async () => {
-    if (!books) return;
+    if (!books || books.length === 0) return;
     const removeCount = books.length - keep.size;
     const warn = backedUp ? "" : "⚠ バックアップはまだ書き出していません。\n";
     if (
       !confirm(
-        `${warn}選んだ ${keep.size} 冊をこの端末に保存します。外した ${removeCount} 冊のうち、クラウド保存がある本はクラウドに退避し、Proに戻すと復元できます（保持〜約6ヶ月）。クラウド保存の無い本（端末のみ）は完全に削除されます。Standardは端末間同期がないため、他の端末のローカルコピーは次回起動時に削除されます。`,
+        `${warn}選んだ ${keep.size} 冊をこの端末に保存します。外した ${removeCount} 冊のうち、クラウド保存がある本はクラウドに退避し、Proに戻すと復元できます（保持〜約6ヶ月）。クラウド保存の無い本（端末のみ）は完全に削除されます。このプランは端末間同期がないため、他の端末のローカルコピーは次回起動時に削除されます。`,
       )
     )
       return;
@@ -78,9 +86,11 @@ export function DowngradeSelect({
       }
       const locals = await listDecks();
       const localIds = new Set(locals.map((d) => d.bookId).filter(Boolean) as string[]);
-      // Reconcile THIS device: delete local copies of books that weren't kept.
+      // Reconcile THIS device: delete local copies of books that weren't kept. A never-registered
+      // local-only import (offline / fail-open — registered flag unset) is NOT part of the account
+      // set the user trimmed; deleting it here would destroy its only copy.
       for (const d of locals) {
-        if (d.id != null && d.bookId && !keep.has(d.bookId)) await deleteDeck(d.id);
+        if (d.id != null && d.bookId && d.registered && !keep.has(d.bookId)) await deleteDeck(d.id);
       }
       // Materialize kept books that aren't on THIS device (now allowed on any tier for active books),
       // then CLAIM the holder — but only AFTER a successful download, so a failure never leaves the
@@ -104,10 +114,42 @@ export function DowngradeSelect({
     }
   }, [books, keep, backedUp, onResolved]);
 
+  if (loadError)
+    return (
+      <div className="panel">
+        <p className="muted">本の一覧を取得できませんでした。通信状況をご確認ください。</p>
+        <button className="btn primary" onClick={load}>
+          再試行
+        </button>
+      </div>
+    );
   if (!books)
     return (
       <div className="panel">
         <p className="muted">読み込み中…</p>
+      </div>
+    );
+  if (books.length === 0)
+    // Server-confirmed: no ACTIVE books left → nothing to choose. Clear the flag and leave.
+    return (
+      <div className="panel">
+        <p className="muted">整理が必要な本はありません。</p>
+        <button
+          className="btn primary"
+          disabled={busy}
+          onClick={async () => {
+            try {
+              setBusy(true);
+              await submitTrim([]);
+              onResolved();
+            } catch (e) {
+              alert("処理に失敗しました: " + (e instanceof Error ? e.message : String(e)));
+              setBusy(false);
+            }
+          }}
+        >
+          本棚へ戻る
+        </button>
       </div>
     );
 

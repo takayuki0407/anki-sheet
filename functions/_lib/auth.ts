@@ -64,27 +64,41 @@ export async function verifyFirebaseToken(token: string, env: Env): Promise<Veri
   if (parts.length !== 3) return null;
   const [h, p, sig] = parts;
   let header: { kid?: string; alg?: string };
-  let payload: { aud?: string; iss?: string; sub?: string; exp?: number; email?: string };
+  let payload: {
+    aud?: string;
+    iss?: string;
+    sub?: string;
+    exp?: number;
+    email?: string;
+    email_verified?: boolean;
+  };
+  const projectId = env.FIREBASE_PROJECT_ID;
+  let ok: boolean;
   try {
     header = JSON.parse(b64urlToString(h));
     payload = JSON.parse(b64urlToString(p));
+    if (header.alg !== "RS256" || !header.kid) return null;
+    if (payload.aud !== projectId) return null;
+    if (payload.iss !== `https://securetoken.google.com/${projectId}`) return null;
+    if (!payload.sub) return null;
+    if (!payload.exp || payload.exp * 1000 <= Date.now()) return null;
+
+    const key = (await getKeys())[header.kid];
+    if (!key) return null;
+    // b64urlToBytes(sig) runs atob — a malformed signature must yield 401 (invalid token), not an
+    // unhandled exception bubbling to a 500. Hence the whole decode+verify is inside this try.
+    ok = await crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      b64urlToBytes(sig),
+      new TextEncoder().encode(`${h}.${p}`),
+    );
   } catch {
     return null;
   }
-  const projectId = env.FIREBASE_PROJECT_ID;
-  if (header.alg !== "RS256" || !header.kid) return null;
-  if (payload.aud !== projectId) return null;
-  if (payload.iss !== `https://securetoken.google.com/${projectId}`) return null;
-  if (!payload.sub) return null;
-  if (!payload.exp || payload.exp * 1000 <= Date.now()) return null;
-
-  const key = (await getKeys())[header.kid];
-  if (!key) return null;
-  const ok = await crypto.subtle.verify(
-    "RSASSA-PKCS1-v1_5",
-    key,
-    b64urlToBytes(sig),
-    new TextEncoder().encode(`${h}.${p}`),
-  );
-  return ok ? { uid: payload.sub, email: payload.email ?? null } : null;
+  if (!ok) return null;
+  // The email is consumed ONLY for the admin-tier check. Honor it solely when Firebase marks it
+  // verified, so an unverified email/password signup can never claim the admin email and inherit
+  // unlimited access. Unverified → email:null → treated as a normal account (its stored/free tier).
+  return { uid: payload.sub!, email: payload.email_verified ? (payload.email ?? null) : null };
 }

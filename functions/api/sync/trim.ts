@@ -18,38 +18,46 @@ export const onRequestPost: Fn = async (ctx) => {
     ? body.keep.filter((b): b is string => typeof b === "string" && b.length > 0)
     : [];
 
-  const tier = await getTier(ctx.env, uid, ctx.data.email);
-  const cap = limitFor(tier);
-  if (keep.length > cap) return json({ error: "too_many", cap }, 400);
-
-  // Stale-screen guard: if the trim is no longer required — e.g. the user re-upgraded to Pro while
-  // the trim screen was open (the webhook already cleared the flag and reactivated retained books)
-  // — a late submit must NOT demote anything.
+  // Stale-screen guard FIRST: if the trim is no longer required — e.g. the user re-upgraded to Pro
+  // while the trim screen was open (the webhook already cleared the flag and reactivated retained
+  // books) — a late submit must NOT demote anything (nor fail on the now-unlimited cap).
   const u = await ctx.env.DB.prepare("SELECT trim_required FROM users WHERE uid = ?")
     .bind(uid)
     .first<{ trim_required: number }>();
   if (!u?.trim_required) return json({ ok: true, kept: 0, skipped: true });
 
-  if (keep.length) {
-    const ph = keep.map(() => "?").join(",");
+  const tier = await getTier(ctx.env, uid, ctx.data.email);
+  const cap = limitFor(tier);
+  if (keep.length > cap) return json({ error: "too_many", cap }, 400);
+
+  // The trim chooses among the CURRENTLY ACTIVE books only. Validating against that set blocks two
+  // failure modes: (a) a stale/buggy client "keeping" a retained/trimmed book and resurrecting it
+  // (a 'trimmed' book has no data anywhere — it would become an unusable ghost that eats a slot),
+  // and (b) the catastrophic empty-keep submit (a client whose book list failed to load showing
+  // 「選んだ 0 冊を残す」) demoting the entire library.
+  const activeRows = await ctx.env.DB.prepare(
+    "SELECT book_id FROM books WHERE uid = ? AND status = 'active'",
+  )
+    .bind(uid)
+    .all<{ book_id: string }>();
+  const activeIds = new Set(activeRows.results.map((r) => r.book_id));
+  if (keep.some((id) => !activeIds.has(id))) return json({ error: "invalid_keep" }, 400);
+  if (activeIds.size > 0 && keep.length === 0) return json({ error: "empty_keep" }, 400);
+
+  if (activeIds.size > 0) {
+    const now = Date.now();
+    // Demote everything active that wasn't kept. Mirrors retain.ts: the holder stamp is cleared
+    // (no device holds a retired book — local copies get deleted on each device's reconcile) and
+    // updated_at is bumped.
+    const ph = keep.length ? keep.map(() => "?").join(",") : "''";
     await ctx.env.DB.prepare(
-      `UPDATE books SET status='active' WHERE uid=? AND book_id IN (${ph})`,
+      `UPDATE books SET status = CASE WHEN size > 0 THEN 'retained' ELSE 'trimmed' END,
+         device = NULL, updated_at = ?
+       WHERE uid = ? AND status = 'active' AND book_id NOT IN (${ph})`,
     )
-      .bind(uid, ...keep)
-      .run();
-    await ctx.env.DB.prepare(
-      `UPDATE books SET status = CASE WHEN size > 0 THEN 'retained' ELSE 'trimmed' END
-       WHERE uid=? AND book_id NOT IN (${ph})`,
-    )
-      .bind(uid, ...keep)
-      .run();
-  } else {
-    await ctx.env.DB.prepare(
-      "UPDATE books SET status = CASE WHEN size > 0 THEN 'retained' ELSE 'trimmed' END WHERE uid=?",
-    )
-      .bind(uid)
+      .bind(now, uid, ...keep)
       .run();
   }
-  await ctx.env.DB.prepare("UPDATE users SET trim_required=0 WHERE uid=?").bind(uid).run();
+  await ctx.env.DB.prepare("UPDATE users SET trim_required = 0 WHERE uid = ?").bind(uid).run();
   return json({ ok: true, kept: keep.length });
 };

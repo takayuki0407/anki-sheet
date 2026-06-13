@@ -1,5 +1,5 @@
 import { db } from "./schema";
-import type { BookmarkRow, CardRow, DeckRow, MetaRow } from "../types";
+import type { BookmarkRow, CardRow, DeckRow, MetaRow, QuestionRow, ReviewRow } from "../types";
 
 interface PdfExport {
   id?: number;
@@ -20,6 +20,10 @@ interface BackupFile {
   cards: CardRow[];
   bookmarks: BookmarkRow[];
   meta: MetaRow[];
+  // Optional (added 2026-06): AI questions + SM-2 review state. Absent in older backups —
+  // importers must tolerate undefined. Kept in the shared cross-platform shape (iOS matches).
+  questions?: QuestionRow[];
+  reviews?: ReviewRow[];
 }
 
 function blobToDataURL(blob: Blob): Promise<string> {
@@ -37,12 +41,14 @@ async function dataURLToBlob(url: string): Promise<Blob> {
 
 /** Serialize the entire DB (incl. PDFs as base64) to a downloadable JSON Blob. */
 export async function exportBackup(): Promise<Blob> {
-  const [decks, pdfsRaw, cards, bookmarks, meta] = await Promise.all([
+  const [decks, pdfsRaw, cards, bookmarks, meta, questions, reviews] = await Promise.all([
     db.decks.toArray(),
     db.pdfs.toArray(),
     db.cards.toArray(),
     db.bookmarks.toArray(),
     db.meta.toArray(),
+    db.questions.toArray(),
+    db.reviews.toArray(),
   ]);
   const pdfs: PdfExport[] = await Promise.all(
     pdfsRaw.map(async (p) => ({
@@ -64,6 +70,8 @@ export async function exportBackup(): Promise<Blob> {
     cards,
     bookmarks,
     meta,
+    questions,
+    reviews,
   };
   return new Blob([JSON.stringify(data)], { type: "application/json" });
 }
@@ -90,7 +98,7 @@ export async function importBackup(file: File): Promise<void> {
 
   await db.transaction(
     "rw",
-    [db.decks, db.pdfs, db.cards, db.bookmarks, db.covers, db.meta],
+    [db.decks, db.pdfs, db.cards, db.bookmarks, db.covers, db.meta, db.questions, db.reviews],
     async () => {
       await Promise.all([
         db.decks.clear(),
@@ -99,12 +107,20 @@ export async function importBackup(file: File): Promise<void> {
         db.bookmarks.clear(),
         db.covers.clear(), // covers regenerate lazily from the PDFs
         db.meta.clear(),
+        db.questions.clear(), // stale AI questions/SM-2 state must not survive a full restore
+        db.reviews.clear(),
       ]);
-      await db.decks.bulkPut(data.decks);
+      // Strip the cloud binding from restored decks so they come back as fresh LOCAL-ONLY books.
+      // Keeping bookId/registered would make the bookshelf reconcile treat a restored deck as a
+      // retained/trimmed account book and silently re-delete it — breaking the "back up, then
+      // restore" escape the downgrade screen advertises. (A Pro user can re-upload afterwards.)
+      await db.decks.bulkPut(data.decks.map((d) => ({ ...d, bookId: undefined, registered: false })));
       await db.pdfs.bulkPut(pdfRows);
       await db.cards.bulkPut(data.cards);
       await db.bookmarks.bulkPut(data.bookmarks ?? []);
       await db.meta.bulkPut(data.meta ?? []);
+      await db.questions.bulkPut(data.questions ?? []);
+      await db.reviews.bulkPut(data.reviews ?? []);
     },
   );
   await db.meta.put({ key: "lastBackup", value: Date.now() });
@@ -115,7 +131,7 @@ export async function importBackup(file: File): Promise<void> {
 export async function clearAllLocalData(): Promise<void> {
   await db.transaction(
     "rw",
-    [db.decks, db.pdfs, db.cards, db.bookmarks, db.covers, db.meta],
+    [db.decks, db.pdfs, db.cards, db.bookmarks, db.covers, db.meta, db.questions, db.reviews],
     async () => {
       await Promise.all([
         db.decks.clear(),
@@ -124,6 +140,10 @@ export async function clearAllLocalData(): Promise<void> {
         db.bookmarks.clear(),
         db.covers.clear(),
         db.meta.clear(),
+        // questions/reviews included: leaving them would leak the previous account's AI questions
+        // and SM-2 history into the next account on this browser.
+        db.questions.clear(),
+        db.reviews.clear(),
       ]);
     },
   );

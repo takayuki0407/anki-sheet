@@ -36,7 +36,7 @@ export function Home() {
               料金プランを見る
             </button>
           </div>
-          <p className="hero-note">ブラウザで今すぐ・登録不要</p>
+          <p className="hero-note">ブラウザで今すぐ・無料アカウントで開始</p>
         </div>
       </section>
 

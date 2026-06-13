@@ -106,7 +106,7 @@ export function ImportWizard() {
     if (file.size > MAX_PDF_BYTES) {
       setPhase({
         k: "error",
-        message: `PDFが大きすぎます（${Math.round(file.size / 1024 / 1024)}MB）。1ファイル ${MAX_PDF_MB}MB までです。`,
+        message: `PDFが大きすぎます（${(file.size / 1024 / 1024).toFixed(1)}MB）。1ファイル ${MAX_PDF_MB}MB までです。`,
         detail: `file: ${file.name}\nsize: ${file.size} bytes`,
       });
       return;
