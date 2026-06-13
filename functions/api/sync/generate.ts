@@ -387,31 +387,45 @@ export const onRequestPost: Fn = async (ctx) => {
   // no orphaned SM-2 state survives a regeneration.
   if (isProPlus) {
     const now = Date.now();
-    await ctx.env.DB.batch([
-      ctx.env.DB.prepare(
-        "DELETE FROM reviews WHERE uid = ? AND question_id IN (SELECT id FROM questions WHERE uid = ? AND book_id = ? AND page_index = ? AND qtype = ?)",
-      ).bind(uid, uid, bookId, pageIndex, qtype),
-      ctx.env.DB.prepare(
-        "DELETE FROM questions WHERE uid = ? AND book_id = ? AND page_index = ? AND qtype = ?",
-      ).bind(uid, bookId, pageIndex, qtype),
-      ...valid.map((q) =>
+    try {
+      await ctx.env.DB.batch([
         ctx.env.DB.prepare(
-          "INSERT INTO questions (id, uid, book_id, page_index, qtype, statement, answer, choices, explanation, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        ).bind(
-          q.id,
-          uid,
-          bookId,
-          pageIndex,
-          q.qtype,
-          q.statement,
-          q.answer,
-          q.choices ? JSON.stringify(q.choices) : null,
-          q.explanation,
-          q.source,
-          now,
+          "DELETE FROM reviews WHERE uid = ? AND question_id IN (SELECT id FROM questions WHERE uid = ? AND book_id = ? AND page_index = ? AND qtype = ?)",
+        ).bind(uid, uid, bookId, pageIndex, qtype),
+        ctx.env.DB.prepare(
+          "DELETE FROM questions WHERE uid = ? AND book_id = ? AND page_index = ? AND qtype = ?",
+        ).bind(uid, bookId, pageIndex, qtype),
+        ...valid.map((q) =>
+          ctx.env.DB.prepare(
+            "INSERT INTO questions (id, uid, book_id, page_index, qtype, statement, answer, choices, explanation, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          ).bind(
+            q.id,
+            uid,
+            bookId,
+            pageIndex,
+            q.qtype,
+            q.statement,
+            q.answer,
+            q.choices ? JSON.stringify(q.choices) : null,
+            q.explanation,
+            q.source,
+            now,
+          ),
         ),
-      ),
-    ]);
+      ]);
+    } catch {
+      // The AI generation succeeded but persisting it failed (transient D1). Don't charge the user
+      // for a result we couldn't store — refund the reserved slot and still return the questions so
+      // they can use them locally (a later regen re-attempts the cloud store).
+      await refund();
+      const r = await ctx.env.DB.prepare(
+        "SELECT count FROM generation_usage WHERE uid = ? AND period = ?",
+      )
+        .bind(uid, p)
+        .first<{ count: number }>();
+      const c = r?.count ?? 0;
+      return json({ questions: valid, count: c, limit, remaining: Math.max(0, limit - c), stored: false });
+    }
   }
 
   // Read back the reserved count for an accurate remaining (the slot was incremented up-front).

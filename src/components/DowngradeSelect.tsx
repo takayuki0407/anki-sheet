@@ -98,7 +98,12 @@ export function DowngradeSelect({
       // retry ("ダウンロード待ち").
       const me = deviceLabel();
       for (const b of books) {
-        if (keep.has(b.book_id) && !localIds.has(b.book_id) && b.size > 0) {
+        if (!keep.has(b.book_id)) continue;
+        if (localIds.has(b.book_id)) {
+          // Already local: claim the holder if another device holds it, else single-home reconcile
+          // would delete this kept copy on the next bookshelf sync.
+          if (b.device !== me) await updateBookMeta(b.book_id, { device: me }).catch(() => {});
+        } else if (b.size > 0) {
           try {
             await downloadDeck(b);
             await updateBookMeta(b.book_id, { device: me }).catch(() => {});
