@@ -654,11 +654,11 @@ export function PageViewer({ deckId }: { deckId: number }) {
   };
 
   const addCurrentBookmark = async () => {
-    const title = window.prompt("しおりの名前（章・節など）", `${pageIndex + 1}ページ`);
+    const title = window.prompt("目次の名前（章・節など）", `${pageIndex + 1}ページ`);
     if (title && title.trim()) await addBookmark(deckId, pageIndex, title.trim());
   };
   const renameBookmarkAt = async (b: BookmarkRow) => {
-    const title = window.prompt("しおりの名前", b.title);
+    const title = window.prompt("目次の名前", b.title);
     if (title && title.trim()) await renameBookmark(b.id!, title.trim());
   };
 
@@ -896,17 +896,17 @@ export function PageViewer({ deckId }: { deckId: number }) {
         <div className="drawer-backdrop" onClick={() => setTocOpen(false)}>
           <div className="drawer" onClick={(e) => e.stopPropagation()}>
             <div className="drawer-head">
-              <h3>目次（しおり）</h3>
+              <h3>目次</h3>
               <button className="btn ghost sm" onClick={() => setTocOpen(false)}>
                 閉じる
               </button>
             </div>
             <button className="btn primary sm" onClick={addCurrentBookmark}>
-              ＋ 現在のページ（p.{pageIndex + 1}）をしおりに追加
+              ＋ 現在のページ（p.{pageIndex + 1}）を目次に追加
             </button>
             {bookmarks.length === 0 && (
               <p className="muted small">
-                まだしおりがありません。章の先頭ページで「追加」すると、ここから移動できます。
+                まだ目次がありません。章の先頭ページで「追加」すると、ここから移動できます。
               </p>
             )}
             <ul className="toc-list">

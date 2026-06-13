@@ -367,7 +367,7 @@ export function ImportWizard() {
           )}
           {phase.result.outline.length > 0 && (
             <p className="muted small">
-              PDFの目次 {phase.result.outline.length} 件もしおりに取り込みます
+              PDFの目次 {phase.result.outline.length} 件も取り込みます
             </p>
           )}
           {previewDoc &&
