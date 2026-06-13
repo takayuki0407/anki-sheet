@@ -3,7 +3,7 @@
 // was imported on — then completes the pending import.
 import { useEffect, useState } from "react";
 import type { PdfDetectionResult } from "../pdf/pdfEngine";
-import { deleteDeck, listDecks } from "../db/repo";
+import { deleteBookQuestions, deleteDeck, listDecks } from "../db/repo";
 import { listBooks, registerBook, unregisterBook, type AccountBook } from "../sync/api";
 import { deviceLabel } from "../sync/device";
 
@@ -56,10 +56,12 @@ export function BookLimitDialog({
     setBusy(true);
     setMsg("");
     try {
-      // Free the chosen slots: unregister each, and delete the local copy if it's on this device.
+      // Free the chosen slots: unregister each, and delete the local copy + its AI questions if it's
+      // on this device (deleteDeck alone would leave orphaned synced questions/reviews behind).
       const decks = await listDecks();
       for (const bid of sel) {
         await unregisterBook(bid).catch(() => {});
+        void deleteBookQuestions(bid).catch(() => {});
         const local = decks.find((d) => d.bookId === bid);
         if (local?.id != null) await deleteDeck(local.id);
       }

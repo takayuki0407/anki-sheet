@@ -4,8 +4,9 @@
 // (unknown/offline falls open so an offline Premium user isn't punished).
 import { useEffect, useState } from "react";
 import { useApp } from "../store/session";
-import { dueReviews, questionsByIds } from "../db/repo";
+import { allReviews, dueReviews, questionsByIds } from "../db/repo";
 import { getGenUsage } from "../ai/generate";
+import { syncReviews } from "../sync/reviews";
 import { SolveSession } from "./SolveSession";
 import type { QuestionRow } from "../types";
 
@@ -22,6 +23,11 @@ export function ReviewScreen() {
       })
       .catch(() => {}); // unknown → fall open
     void (async () => {
+      // Pull the latest cross-device review state first (Premium); 403/offline is a no-op so the
+      // screen still works on local data. Without it, another device's answers wouldn't show here
+      // until that book's individual quiz was opened.
+      const all = await allReviews();
+      await syncReviews(new Map(all.map((r) => [r.questionId, r.bookId]))).catch(() => {});
       const due = await dueReviews(Date.now());
       const qs = await questionsByIds(due.map((r) => r.questionId));
       // Keep the due order (most overdue first) — questionsByIds preserves input order.
