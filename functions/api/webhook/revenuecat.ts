@@ -73,9 +73,34 @@ async function applyTier(
   if (cloud) await reactivateRetained(ctx.env, uid);
 }
 
+/** Constant-time comparison for the webhook bearer secret. Double-HMAC with a per-request random key
+ * reduces both inputs to a fixed 32-byte digest before the XOR, so neither the secret's bytes nor its
+ * length leak through comparison timing (a plain `!==` short-circuits on the first differing byte).
+ * WebCrypto is available in Pages Functions (see _lib/auth.ts). */
+async function secretEquals(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    crypto.getRandomValues(new Uint8Array(32)),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const [ha, hb] = await Promise.all([
+    crypto.subtle.sign("HMAC", key, enc.encode(a)),
+    crypto.subtle.sign("HMAC", key, enc.encode(b)),
+  ]);
+  const x = new Uint8Array(ha);
+  const y = new Uint8Array(hb);
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+  return diff === 0;
+}
+
 export const onRequestPost: Fn = async (ctx) => {
   const secret = ctx.env.RC_WEBHOOK_SECRET;
-  if (!secret || ctx.request.headers.get("Authorization") !== secret)
+  const provided = ctx.request.headers.get("Authorization");
+  if (!secret || !provided || !(await secretEquals(provided, secret)))
     return json({ error: "unauthorized" }, 401);
 
   let body: {
