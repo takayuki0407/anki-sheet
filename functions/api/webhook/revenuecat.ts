@@ -133,7 +133,15 @@ export const onRequestPost: Fn = async (ctx) => {
   let tier: Tier | null = null;
   if (GRANT.has(e.type)) {
     const ents = e.entitlement_ids ?? [];
-    tier = ents.includes("premium") ? "premium" : ents.includes("pro") ? "pro" : "standard";
+    // An empty / unknown entitlement set must NOT silently grant the paid "standard" tier — fall
+    // through to null so a GRANT carrying no recognizable entitlement is a no-op (handled below).
+    tier = ents.includes("premium")
+      ? "premium"
+      : ents.includes("pro")
+        ? "pro"
+        : ents.includes("standard")
+          ? "standard"
+          : null;
   } else if (REVOKE.has(e.type)) {
     tier = "free"; // expired subscription → the Free floor (NOT Standard)
   }

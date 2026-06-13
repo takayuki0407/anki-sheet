@@ -8,7 +8,7 @@
 // (only `clozes[]`, from an old client) keeps the old whole-blob replace. GET returns the merged blob
 // plus the active `clozes[]` mirror so old clients keep working.
 import { json, type Fn } from "../../../../_lib/types";
-import { getTier, isUnlimited } from "../../../../_lib/tier";
+import { canFetchOwnBook, getTier, isUnlimited } from "../../../../_lib/tier";
 import {
   normalizeContent,
   mergeContent,
@@ -56,6 +56,13 @@ export const onRequestPut: Fn = async (ctx) => {
 export const onRequestGet: Fn = async (ctx) => {
   const uid = ctx.data.uid!;
   if (!ctx.env.PDFS) return json({ error: "r2_not_configured" }, 503);
+  // Mirror blob.ts: the owner may fetch their own ACTIVE book on any tier, but retained/trimmed
+  // content stays Pro-only (preserved purely for re-Pro restore) — same gate as the PDF blob GET.
+  const row = await ctx.env.DB.prepare("SELECT status FROM books WHERE uid = ? AND book_id = ?")
+    .bind(uid, ctx.params.bookId)
+    .first<{ status: string }>();
+  if (!canFetchOwnBook(row?.status, await getTier(ctx.env, uid, ctx.data.email)))
+    return json({ error: "pro_required" }, 403);
   const obj = await ctx.env.PDFS.get(key(uid, ctx.params.bookId));
   if (!obj) return json({ error: "not_found" }, 404);
   const text = await obj.text();
