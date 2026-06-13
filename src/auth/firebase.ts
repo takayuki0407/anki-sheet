@@ -1,8 +1,9 @@
 // Firebase Auth for the web app. The same email/password account works on iOS + web, so one
 // login unlocks cross-platform sync (Pro). These are PUBLIC client identifiers — safe to commit;
 // Firebase security comes from Authorized Domains + our backend verifying the ID token, not from
-// hiding these values. (Add `anki-sheet.pages.dev` under Firebase Auth → Settings → Authorized
-// domains for login to work on the deployed site.)
+// hiding these values. (Add the deployed origins — `kiokumate.tkdevlab.com` and the fallback
+// `anki-sheet.pages.dev` — under Firebase Auth → Settings → Authorized domains, or login fails
+// on that origin.)
 import { initializeApp, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 
