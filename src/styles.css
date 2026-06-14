@@ -1166,6 +1166,12 @@ body:has(.viewer) {
   gap: 12px;
   margin-top: 8px;
 }
+.auth-hint {
+  color: var(--ocean);
+  font-size: 13px;
+  text-align: center;
+  margin: 8px 0 0;
+}
 .oauth-buttons {
   display: flex;
   flex-direction: column;

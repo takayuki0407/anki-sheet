@@ -59,6 +59,22 @@ function authError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// Device-local hint: remember the method used last time so a returning user picks the same one
+// (different methods / Apple "Hide My Email" resolve to different accounts). Same-browser only.
+const LAST_METHOD_KEY = "lastSignInMethod";
+const METHOD_LABEL: Record<string, string> = {
+  apple: "Apple",
+  google: "Google",
+  email: "メールアドレス",
+};
+function rememberMethod(m: "apple" | "google" | "email") {
+  try {
+    localStorage.setItem(LAST_METHOD_KEY, m);
+  } catch {
+    /* storage disabled — the hint is optional */
+  }
+}
+
 export function Login() {
   const setView = useApp((s) => s.setView);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -66,6 +82,13 @@ export function Login() {
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [lastMethod] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(LAST_METHOD_KEY);
+    } catch {
+      return null;
+    }
+  });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,6 +97,7 @@ export function Login() {
     try {
       if (mode === "signin") await signIn(email.trim(), pw);
       else await signUp(email.trim(), pw);
+      rememberMethod("email");
       setView({ name: "decks" });
     } catch (err) {
       setMsg(authError(err));
@@ -95,11 +119,12 @@ export function Login() {
     }
   };
 
-  const oauth = async (fn: () => Promise<unknown>) => {
+  const oauth = async (fn: () => Promise<unknown>, method: "apple" | "google") => {
     setBusy(true);
     setMsg("");
     try {
       await fn();
+      rememberMethod(method);
       setView({ name: "decks" });
     } catch (err) {
       const code =
@@ -121,11 +146,14 @@ export function Login() {
         </button>
         <h2>{mode === "signin" ? "ログイン" : "アカウント作成"}</h2>
       </div>
+      {mode === "signin" && lastMethod && METHOD_LABEL[lastMethod] ? (
+        <p className="auth-hint">前回は{METHOD_LABEL[lastMethod]}でログインしました</p>
+      ) : null}
       <div className="oauth-buttons">
         <button
           type="button"
           className="oauth-btn apple"
-          onClick={() => oauth(signInWithApple)}
+          onClick={() => oauth(signInWithApple, "apple")}
           disabled={busy}
         >
           <AppleIcon />
@@ -134,7 +162,7 @@ export function Login() {
         <button
           type="button"
           className="oauth-btn google"
-          onClick={() => oauth(signInWithGoogle)}
+          onClick={() => oauth(signInWithGoogle, "google")}
           disabled={busy}
         >
           <GoogleIcon />
