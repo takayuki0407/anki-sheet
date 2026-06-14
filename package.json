@@ -11,6 +11,8 @@
     "dev": "vite",
     "predev:host": "node scripts/copy-pdfjs-assets.mjs",
     "dev:host": "vite --host",
+    "predev:public": "node scripts/copy-pdfjs-assets.mjs",
+    "dev:public": "vite --mode public",
     "prebuild": "node scripts/copy-pdfjs-assets.mjs",
     "build": "vite build",
     "build:public": "node scripts/copy-pdfjs-assets.mjs && vite build --mode public",
