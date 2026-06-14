@@ -6,10 +6,13 @@ import {
   createUserWithEmailAndPassword,
   deleteUser,
   EmailAuthProvider,
+  GoogleAuthProvider,
+  OAuthProvider,
   onAuthStateChanged,
   reauthenticateWithCredential,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut as fbSignOut,
   type User,
 } from "firebase/auth";
@@ -54,6 +57,19 @@ export const signUp = (email: string, password: string) =>
   createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
 export const resetPassword = (email: string) => sendPasswordResetEmail(getFirebaseAuth(), email);
 export const signOutUser = () => fbSignOut(getFirebaseAuth());
+
+// Federated sign-in (popup). Same Firebase project as iOS, so a given Google account / Apple ID
+// resolves to the SAME uid across web and app — data follows the user. The onAuthStateChanged
+// listener above picks up the resulting session. Requires the deployed origin to be listed under
+// Firebase Auth → Settings → Authorized domains, and (for Apple on web) an Apple Services ID
+// configured in the Firebase Apple provider.
+export const signInWithGoogle = () => signInWithPopup(getFirebaseAuth(), new GoogleAuthProvider());
+export const signInWithApple = () => {
+  const provider = new OAuthProvider("apple.com");
+  provider.addScope("email");
+  provider.addScope("name");
+  return signInWithPopup(getFirebaseAuth(), provider);
+};
 
 /** The current user's Firebase ID token (for Authorization: Bearer …), or null if signed out. */
 export async function getIdToken(): Promise<string | null> {

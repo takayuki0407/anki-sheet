@@ -1166,6 +1166,59 @@ body:has(.viewer) {
   gap: 12px;
   margin-top: 8px;
 }
+.oauth-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.oauth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+.oauth-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.oauth-btn:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+.oauth-btn.apple {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+.oauth-btn.google {
+  background: #fff;
+  color: #1f1f1f;
+}
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 16px 0 4px;
+}
+.oauth-divider::before,
+.oauth-divider::after {
+  content: "";
+  flex: 1;
+  border-bottom: 1px solid var(--line);
+}
+.oauth-divider span {
+  padding: 0 12px;
+}
 .auth-links {
   display: flex;
   justify-content: space-between;
